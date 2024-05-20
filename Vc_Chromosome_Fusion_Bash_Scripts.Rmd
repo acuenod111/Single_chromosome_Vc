@@ -1,0 +1,1093 @@
+---
+title: "Vc_Chromosome_Fusion_Scripts"
+output: html_document
+date: "2024-05-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Sequence analysis of isolates collected for this study
+## Assembly and Quality control
+### Trycycler
+
+As a check to make sure the fused structure is no assembly error, I assemble 10 of the fused ones (one per patient) and three non-fused ones as controls using trycycler following the tutorial. 
+I subsample each fastq files 12 times using the following: 
+
+```{bash, echo=F, eval=F}
+# filter reads using filtlong
+/home/acuenod/software/venvs/Filtlong/bin/filtlong --min_length 1000 --keep_percent 95 "$input_dir"/"$sample".fastq.gz > "$filt_dir"/"$sample".fastq.gz
+
+# subsample reads
+trycycler subsample --reads "$filt_dir"/"$sample".fastq.gz --out_dir "$subsample_dir"/"$sample" --count 12 --genome_size 4000000 --threads 8
+
+```
+
+Then to assemble, I use flye, raven, miniasm+minipolish and canu as follows: 
+
+```{bash, echo=F, eval=F}
+array=(mock 111Vc05 112Vc01 113Vc01 114Vc03 117Vc01 119Vc01 120Vc01 121Vc01 134Vc05 135Vc02 114Vc01 128Vc06 142Vc02)
+
+## define the variable 'sample_id'from the 'array' defined above
+#flye
+for i in 01 05 09; do
+    /home/acuenod/software/venvs/Flye/bin/flye --nano-hq "$subsample_dir"/sample_"$i".fastq --threads "$threads" --out-dir "$assembly_dir"_"$i" && cp "$assembly_dir"_"$i"/assembly.fasta "$assembly_dir"/assembly_"$i".fasta && cp "$assembly_dir"_"$i"/assembly_graph.gfa "$assembly_dir"/assembly_"$i".gfa && rm -r "$assembly_dir"_"$i"
+done
+
+#miniasm + minipolish
+for j in 02 06 10; do
+    /home/acuenod/software/venvs/Minipolish/miniasm_and_minipolish.sh "$subsample_dir"/sample_"$j".fastq "$threads" > "$assembly_dir"/assembly_"$j".gfa && /home/acuenod/software/venvs/any2fasta/any2fasta "$assembly_dir"/assembly_"$j".gfa > "$assembly_dir"/assembly_"$j".fasta
+done
+
+#raven
+for k in 03 07 11; do
+    raven --threads "$threads" --disable-checkpoints --graphical-fragment-assembly "$assembly_dir"/assembly_"$k".gfa "$subsample_dir"/sample_"$k".fastq > "$assembly_dir"/assembly_"$k".fasta
+done
+
+#canu
+canu_tmp_dir=/home/acuenod/scratch/household/01_data/18_trycycler/assemblies/canu_temp_"$sample"
+for l in 04 08 12; do
+    canu -p canu -d "$canu_tmp_dir"_"$l"  -fast genomeSize=4000000 useGrid=false maxThreads="$threads" -nanopore "$subsample_dir"/sample_"$l".fastq
+    /home/acuenod/software/venvs/edlib/trycycler/canu_trim.py "$canu_tmp_dir"_"$l"/canu.contigs.fasta > "$assembly_dir"/assembly_"$l".fasta
+    rm -rf "$canu_tmp_dir"_"$l"
+done
+
+```
+
+Next, I manually checked how many big (>=1MB) contigs were assembles and how many of these were circular. I checked all gfa files in bandage, except for the canu assemblies (here I had no gfa file, but checked the contig headers). for the next, I exclude all for which not all large assemblies were circular (see 01_household_study/01_data/16_check_singular_contig/trycycler/Check_bandage_manually.xlsx)
+
+I moved the ones to be excluded to assemblies_excluded. 
+
+I next clustered the remaining contigs using: 
+
+```{bash, eval=F, echo=F}
+trycycler cluster --assemblies "$assembly_dir"/*fasta --reads "$reads" --out_dir "$cluster_dir"
+```
+
+
+Trycycler cluster outputs a tree per sample. I consider all clusters as valuable, if they occure in at least two assemblies and are of similar size. 
+134Vc05 could somehow not be opened in figtree, I read the raw newick file instead. On the clusters which were kept, run trycycler reconcile: 
+
+```{bash, echo=F, eval=F}
+for cluster in $(ls -d ${cluster_dir}/cluster* |sed 's/.*\///g')
+do
+  echo ${cluster}
+  trycycler reconcile  --reads "$reads"  --cluster_dir "$cluster_dir"/${cluster} --threads "$threads"
+done
+
+
+
+```
+
+
+Some contigs caused the following error: 
+"Error: some pairwise worst-1kbp identities are below the minimum allowed value
+of 25.0%. Please remove offending sequences or lower the --min_1kbp_identity
+threshold and try again.". --> I excluded the sequences causing the error. 
+
+Some failed to circularise, I exclude these too. 
+Then run tryclcler reconcile again. 
+
+Then, run trycycler msa and partition the reads with trycycler partition. trycycler msa:
+
+```{bash, echo=F, eval=F}
+for cluster in $(ls -d ${cluster_dir}/cluster* |sed 's/.*\///g')
+do
+  echo ${cluster}
+  trycycler msa --cluster_dir "$cluster_dir"/${cluster} --threads "$threads"
+done
+```
+ 
+ Then trycycler partition:
+```{bash, echo=F, eval=F}
+reads=/lustre04/scratch/acuenod/household/01_data/18_trycycler/reads/1_filtered/"$sample".fastq.gz
+cluster_dir=/lustre04/scratch/acuenod/household/01_data/18_trycycler/clusters/"$sample"
+
+mkdir "$cluster_dir"
+
+trycycler partition --reads "$reads" --cluster_dirs "$cluster_dir"/cluster_* --threads "$threads"
+```
+
+Then build a consensus: 
+```{bash, echo=F, eval=F}
+reads=/lustre04/scratch/acuenod/household/01_data/18_trycycler/reads/1_filtered/"$sample".fastq.gz
+cluster_dir=/lustre04/scratch/acuenod/household/01_data/18_trycycler/clusters/"$sample"
+
+for cluster in $(ls -d ${cluster_dir}/cluster* |sed 's/.*\///g')
+do
+  echo ${cluster}
+  trycycler consensus --cluster_dir "$cluster_dir"/${cluster} --threads "$threads"
+done
+
+
+```
+
+And summarise the consensus
+
+```{bash, echo=F}
+
+for sample in $(ls -d /lustre04/scratch/acuenod/household/01_data/18_trycycler/clusters/1*)
+do
+  echo ${sample}
+  cat ${sample}/cluster_*/7_final_consensus.fasta > ${sample}/consensus.fasta
+done
+
+```
+
+### Quality control
+The trycycler assemblies looked similar (especially in termsof fusion / non-fusion) than the assemblies generated by flye (not on subset, but on all reads), which I used for the rest of the analysis. 
+I used the following for quality control of the flye assemblies: 
+  - To get stats on the assemblies use Nanostats and Quast
+  - remap all reads to the generated assembly. Use the resulting bam file to calculate the overall read depth 
+  - summarise all to one table
+
+```{bash, echo=F, eval=F}
+
+# assign reads to new variable
+R=00_reads/fastq/"$sample_id".fastq.gz
+
+# assign assembly to variable
+assembly=01_assemblies/"$sample_id".fasta
+
+mkdir -p 02_quality/"$sample_id"
+
+# get read stats using nanostat
+source "$venv_dir"/nanostats/bin/activate
+NanoStat -t "$SLURM_CPUS_PER_TASK" --fastq "$R" --outdir 02_quality/"$sample_id"/nanostat/ --name "$sample_id" --tsv
+deactivate
+
+##get assembly stats using quast
+module load StdEnv/2020  gcc/9.3.0 quast/5.0.2
+quast --min-contig 0 -o 02_quality/"$sample_id"/quast/ "$assembly"
+module unload quast/5.0.2
+
+#remap the reads to the assembly (using minimap) to calculate read depth
+# load modules
+module load bwa/0.7.17
+module load samtools/1.17
+module load minimap2/2.24
+mkdir -p 02_quality/"$sample_id"/remapping/mapping/
+cp "$assembly" 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna
+# index assembly
+bwa index 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna
+# map
+minimap2 -ax map-ont -t "$SLURM_CPUS_PER_TASK" 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna "$R"  > 02_quality/"$sample_id"/remapping/mapping/alingnment.sam
+# sort the sam file and convert to bam
+samtools sort -@ "$SLURM_CPUS_PER_TASK" -T 02_quality/"$sample_id"/remapping/mapping/temp_sort -o 02_quality/"$sample_id"/remapping/mapping/alingnment.bam 02_quality/"$sample_id"/remapping/mapping/alingnment.sam
+# remove duplicates (not sure?) and index
+samtools rmdup 02_quality/"$sample_id"/remapping/mapping/alingnment.bam 02_quality/"$sample_id"/remapping/mapping/alingnment.removed_duplicates.bam
+samtools index 02_quality/"$sample_id"/remapping/mapping/alingnment.removed_duplicates.bam
+# calculate read depth
+samtools depth -aa 02_quality/"$sample_id"/remapping/mapping/alingnment.removed_duplicates.bam | awk '{sum+=$3;count+=1;}END{print sum/count;}'  > 02_quality/"$sample_id"/remapping/coverage.tab
+module unload bwa/0.7.17
+module unload samtools/1.17
+rm 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna
+
+## summarise quality stats
+mkdir 02_quality/"$sample_id"/summary
+## fetch median read length, n50 and median read quality from nanostats
+awk '$1 == "median_read_length" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1a.txt
+awk '$1 == "n50" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1b.txt
+awk '$1 == "median_qual" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1c.txt
+awk '$1 == "mean_qual" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1d.txt
+awk '$1 == "ALL" {print $8}' 02_quality/"$sample_id"/seqtk_fqchk/"$sample_id".tab > 02_quality/"$sample_id"/summary/1e.txt
+# fetch the read depth from the remapping
+cp 02_quality/"$sample_id"/remapping/coverage.tab 02_quality/"$sample_id"/summary/2.txt
+# fetch coontig count from quast
+tail -n 1 02_quality/"$sample_id"/quast/transposed_report.tsv | awk '{print $14 "\t" $16  "\t" $18  "\t" $17 }' > 02_quality/"$sample_id"/summary/3.txt
+# summaris quality stats for all samples
+paste <(echo "$sample_id") 02_quality/"$sample_id"/summary/*.txt > 02_quality/"$sample_id"/summary/"$sample_id".tab
+echo -e "Sample\tMedian_read_length\tN50_reads\tMedian_read_quality_nanostat\tMean_read_quality_nanostat\tMean_read_quality_seqtk\tRead_depth\tContig_count\tTotal_length_assembly\tN50_assembly\tGC_percent" >  02_quality/quality_plate2_4.tab
+cat 02_quality/*/summary/*.tab >> 02_quality/quality.tab
+# count the number of samples analysed
+let sample_count=$(grep -c "" 02_quality/quality.tab)-1
+echo "analysed_samples: $sample_count" >> 02_quality/quality.tab
+# convert tab to csv for export
+sed 's/,/;/' 02_quality/quality.tab | sed 's/\t/,/g' > 02_quality/quality.csv
+
+```
+
+To retrieve information on circularity of the contigs, I summarised all info files from the flye assemblies using the following:
+
+```{bash, eval=FALSE, echo=FALSE}
+
+for sample in $(cat /lustre04/scratch/acuenod/household/01_data/samples.txt); do   
+  echo "${sample}"
+  infile=/lustre04/scratch/acuenod/household/01_data/999_raw/AW02/assembliesFlye/"${sample}"/assembly_info.txt
+  sed "s/$/&\t${sample}/" "$infile" >> all_fly_assembly_info.txt
+done
+#remove all header lines but first one 
+sed -i -e '/^\#seq\_name/{x;/./!{x;h;b;};d}' all_fly_assembly_info.txt
+````
+
+Evaluate this in plot_QC_ONT.R
+
+### Annotation
+Each sample was annotated using bakta: 
+```{bash, echo=F, eval=F}
+bakta  --verbose --keep-contig-headers --db "$db" "$input_assembly" --output "$outbut_dir" --force
+```
+
+
+## Phylogeny
+### SNV tree
+To generate a SNV based phylogenetic tree, I did the following: 
+- map reads to an external reference (Vc N16961) to call SNV using medaka
+- Filter out indels
+- extract low quality (lower than Qscore 40, corresponds to 0.0001 error probability) - from VCF to bed
+- use bcftools consensus to build consensus and mask these low quality sites (I do this per sample)
+- concatenate
+- build tree using raxml
+
+Medaka: 
+```{bash, echo=F, eal=F}
+ml apptainer
+## define read directory
+read_dir=/lustre04/scratch/acuenod/household/01_data/00_reads/fastq
+ref=/lustre04/scratch/acuenod/household/01_data/11_tree/ref/Vc_N16961/GCF_001250235.2_5174_7_8_v2_genomic.fna
+outdir=/lustre04/scratch/acuenod/household/01_data/11_tree/output/ref_N16961
+
+apptainer run -e -B /lustre04/scratch/ /home/acuenod/software/containers/medaka.sif medaka_haploid_variant -x  -i "$read_dir"/"$sample_id".fastq.gz -r "$ref" -o "$outdir"/"$sample_id" -f -t "$threads" -m r1041_e82_400bps_sup_variant_v4.2.0
+```
+
+Three files failed repeatadly at the annotation step (120Vc05 130Vc10 145Vc02). (I tried increasing memory (although they are not bigger than other files), but the error remains). 
+I think I do not need the annotation, as I continue with the produced medaka.vcf file which is produced for these without error. Next, I filter these .vcf files (remove indels and build consensus with lowQ SNV masked)
+
+```{bash, echo=F, eval=F}
+# remove indels using vcf tools # ' --recode --recode-INFO-all' is needed, no output is produced otherwise
+ml  StdEnv/2023 vcftools/0.1.16
+vcftools --vcf  "$vcf_raw" --remove-indels --recode --recode-INFO-all --out "$vcf_no_indels"
+
+ml StdEnv/2020 bedops/2.4.41
+# use bedops vcf2bed to get all lowQ (<40 as this is equal to a error probability of 0.0001) variants to mask
+vcf2bed --keep-header < "$vcf_no_indels".recode.vcf | awk '{if($5 < 40) print}'  > "$lowQ_sites_bed"
+
+ml StdEnv/2023  gcc/12.3 bcftools/1.18
+bgzip -c "$vcf_no_indels".recode.vcf > "$vcf_no_indels".gz
+bcftools index "$vcf_no_indels".gz
+
+bcftools consensus --prefix "$sample" --fasta-ref "$ref_fasta" --mask "$lowQ_sites_bed"  --output "$hq_snv" "$vcf_no_indels".gz
+```
+
+Then to concatenate the consensus per sample using: 
+```{bash, echo=F, eval=F}
+echo ">"$sample"" > /lustre04/scratch/acuenod/household/01_data/11_tree/output/ref_N16961/"$sample"/"$sample"_highQ_variants_no_indels_concat.fasta
+grep -v '>' /lustre04/scratch/acuenod/household/01_data/11_tree/output/ref_N16961/"$sample"/"$sample"_highQ_variants_no_indels.fasta >> /lustre04/scratch/acuenod/household/01_data/11_tree/output/ref_N16961/"$sample"/"$sample"_highQ_variants_no_indels_concat.fasta
+
+```
+
+Tree is compiled using RAxML: 
+```{bash, echo=F, eval=F}
+raxmlHPC -T "$SLURM_CPUS_PER_TASK" -x 1522 -f a -m GTRCAT -p 1522 -# 10 -s /lustre04/scratch/acuenod/household/01_data/11_tree/output/all_concat_highQ_variants_no_indels_concat.fasta -w /lustre04/scratch/acuenod/household/01_data/11_tree/output/raxml/ -n raxmltree_all -V AVX2
+
+```
+
+### Lineage Assignment
+To have a solid way to call lineages within pandemic Vc strains, I chose one reference strain per lineage (see 'lineage_assignmnet.R'), downloaded the reads and assembled these (as usual). 
+I then calculated fastANI of my strains to all of these. Unfortunately, this was not unambiguous, as sometimes I see very high values to more than one reference strain. As this is based on the assembly, sequencing errors can play a role here. To circumvent this I now used medaka and filtered for high quality SNV of all my strains against the references using the following: 
+
+```{bash, echo=F, eval=F}
+ml apptainer
+## define read directory
+read_dir=/lustre04/scratch/acuenod/household/01_data/00_reads/fastq
+ref_dir=/lustre04/scratch/acuenod/household/01_data/17_lineage_assignment/refs/fasta/
+outdir=/lustre04/scratch/acuenod/household/01_data/17_lineage_assignment/medaka/out/
+
+ml StdEnv/2023 vcftools/0.1.16
+
+for ref in $(ls "$ref_dir")
+do
+  apptainer run -e -B /lustre04/scratch/ /home/acuenod/software/containers/medaka.sif medaka_haploid_variant -i "$read_dir"/"$sample_id".fastq.gz -r "$ref_dir"/"$ref" -o "$outdir"/"$sample_id"/"$ref" -f -t "$threads" -m r1041_e82_400bps_sup_variant_v4.2.0
+  vcf_raw="$outdir"/"$sample_id"/"$ref"/medaka.vcf
+  vcf_hqsnv="$outdir"/"$sample_id"/"$sample_id"_"$ref"_medaka_hq_snv.vcf
+  tab_hqsnv="$outdir"/"$sample_id"/"$sample_id"_"$ref"_medaka_hq_snv.tab
+  # there is no depth info, and I know that real SNV are usually very high quality, therefore, in crease minQ, leave all other
+  # quality 40 corresponds to 0.0001 error probability
+vcftools --vcf "$vcf_raw"  --minQ 40 --recode --recode-INFO-all --out "$vcf_hqsnv"
+done
+
+```
+
+To summarise these and count hq SNV I used the following: 
+
+```{bash, echo=F, eval=F}
+cd /home/acuenod/scratch/household/01_data/17_lineage_assignment/medaka/out
+grep -c -v '^\#' */*_medaka_hq_snv.vcf.recode.vcf > hq_snv_counts.txt
+```
+Evaluate in 'lineage_assignment.R'
+## HS1
+### Identify and screen HS1
+of 117Vc07 and 134Vc04 I blasted chromosome 1 against chromosome 2 using the following: 
+
+```{bash}
+makeblastdb -in /lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homologuous_region_between_chr/blast/input/db/134Vc041.fasta -dbtype nucl -out /lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homologuous_region_between_chr/blast/input/db/134Vc041
+
+db=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homologuous_region_between_chr/blast/input/db/134Vc041
+query=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homologuous_region_between_chr/blast/input/query/134Vc042.fasta
+out=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homologuous_region_between_chr/blast/output/134Vc042_vs_134Vc041.tab
+
+blastn -query "$query" -db  "$db" \
+  -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send qseq sseq' \
+  -max_target_seqs 5000 -out "$out"
+
+```
+
+--> use the overlav of 134Vc04 chr1 and 134Vc04 chr 2 as query to screen other the same sequence in other genomes using blastn:
+
+```{bash, echo=FALSE, eval=FALSE}
+# load module
+ml StdEnv/2020 gcc/9.3.0 blast+/2.13.0
+
+db=/lustre04/scratch/acuenod/household/01_data/05_blast/db/householddb
+query=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homologuous_region_between_chr/blast_overlap_against_all/input/query/overlap_134Vc041_134Vc042.fasta
+out=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homologuous_region_between_chr/blast_overlap_against_all/output/blastout_HR_all.tab
+
+blastn -query "$query" -db  "$db" \
+  -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send' \
+  -max_target_seqs 5000 -out "$out"
+```
+Then also evaluated in 'eval_read_count_HR.R'. 
+### annotate HS1 using bakta
+
+```{bash}
+input_assembly=/lustre04/scratch/acuenod/household/01_data/03_bakta/12kb_overlap/overlap_134Vc041_134Vc042.fasta
+outbut_dir=/lustre04/scratch/acuenod/household/01_data/03_bakta/12kb_overlap/overlap
+
+## added '--keep-contig-headers' flag, rerun with this when adding new sequences
+bakta  --verbose --keep-contig-headers --db /lustre03/project/6077363/GROUP/01_db/bakta/ "$input_assembly" --output "$outbut_dir" --force
+
+```
+
+
+### Count reads spanning HS1 in the fused and non-fused state
+I realised that when checking how many reads span a region (the HR region on the fused chromosomes (aka junctions) or the HR regions on the non-fused ones) I need to exclude reads which have a large deteletion compared to the reference. (I realised as I had read ID in my outputs from BD1.2 strains chr2 which do not contain the 12kb HR, the reads still mapped, but with a large deteltion, these need to be removed). 
+
+
+For the junctions (chr1-HS1-chr2 or chr2-HS1-chr1, for the two junctions) I can the following: 
+```{bash, echo=F, eval=F}
+#load apptainer module 
+ml  StdEnv/2020 samtools/1.17
+
+input=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/read_depth_2chr_at_junction/readmapping/"$sample".sorted.bam
+input_bed_junction=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/135Vc06_junctions_extended_HR_13087.bed #all were mapped agains 135Vc06 (junction position always stays the same)
+output_bed=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/beds_out/"$sample".bed
+output_bed_no_inserts=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/beds_out/"$sample"_no_inserts_larger_1000.bed
+output_readID_junction_1=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction1.txt
+output_readID_junction_2=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction2.txt
+
+
+# bam to bed
+ml bedtools/2.29.2
+# convert bam to bed and filter bed for reads. remove duplicated reads and non-primary alignments
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |bedtools bamtobed > "$output_bed"
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}\D)/' |bedtools bamtobed > "$output_bed_no_inserts"
+
+#bedtools bamtobed -i "$input" > "$output_bed"
+# extract reads spanning junction 1
+junction_1_1=$(awk '$4== "junction_1" {print $2}' "$input_bed_junction")
+junction_1_2=$(awk '$4== "junction_1" {print $3}' "$input_bed_junction")
+#bedtools bamtobed -i "$input" | awk -v var1="$junction_1_1" -v var2="$junction_1_2" '{ if ($2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"junction_1":"junction_1")} 1' > "$output_readID_junction_1"
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP | awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}D)/{print}' | bedtools bamtobed | awk -v var1="$junction_1_1" -v var2="$junction_1_2" '{ if ($2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"junction_1":"junction_1")} 1' > "$output_readID_junction_1"
+
+# extract reads spanning junction 2
+junction_2_1=$(awk '$4== "junction_2" {print $2}' "$input_bed_junction")
+junction_2_2=$(awk '$4== "junction_2" {print $3}' "$input_bed_junction")
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP | awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}D)/{print}' | bedtools bamtobed | awk -v var1="$junction_2_1" -v var2="$junction_2_2" '{ if ($2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"junction_2":"junction_2")} 1' > "$output_readID_junction_2"
+
+
+```
+
+and for the HS1 on the chromosome (chr1 OR chr2) the following: 
+```{bash, echo=F, eval=F}
+#load apptainer module 
+ml  StdEnv/2020 samtools/1.17
+
+input=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/read_depth_2chr_at_junction/readmapping_non-fused_HR/"$sample".sorted.bam
+input_bed_HR_chr=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused/135Vc05_junctions_extended_HR_13087.bed #all were mapped agains 135Vc06 (HR_chr position always stays the same)
+output_bed=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused/beds_out/"$sample".bed
+output_bed_no_inserts=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused/beds_out/"$sample"_no_inserts_larger_1000.bed
+output_readID_HR_chr_1=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused/out/"$sample"_reads_spanning_HR1.txt
+output_readID_HR_chr_2=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused/out/"$sample"_reads_spanning_HR2.txt
+
+
+# bam to bed
+ml bedtools/2.29.2
+# convert bam to bed and filter bed for reads. remove duplicated reads and non-primary alignments
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |bedtools bamtobed > "$output_bed"
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}\D)/' |bedtools bamtobed > "$output_bed_no_inserts"
+# this second line filters reads out which have an deletion (when compared to the reference of 1000 or more. (this first awk expression extracts the headers, the second excludes reads which have a 4-digit-D pattern in their CIGAR string)
+
+#bedtools bamtobed -i "$input" > "$output_bed"
+
+# extract reads spanning HR_chr 1
+HR_chr_1_1=$(awk '$4== "HR_chr_1" {print $2}' "$input_bed_HR_chr")
+HR_chr_1_2=$(awk '$4== "HR_chr_1" {print $3}' "$input_bed_HR_chr")
+chr1_name=$(awk '$4== "HR_chr_1" {print $1}' "$input_bed_HR_chr")
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}D)/{print}' |bedtools bamtobed | awk -v var0="$chr1_name" -v var1="$HR_chr_1_1" -v var2="$HR_chr_1_2" '{ if ($1 == var0 && $2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"HR_chr_1":"HR_chr_1")} 1' > "$output_readID_HR_chr_1"
+
+# extract reads spanning HR_chr 1
+HR_chr_2_1=$(awk '$4== "HR_chr_2" {print $2}' "$input_bed_HR_chr")
+HR_chr_2_2=$(awk '$4== "HR_chr_2" {print $3}' "$input_bed_HR_chr")
+chr2_name=$(awk '$4== "HR_chr_2" {print $1}' "$input_bed_HR_chr")
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}D)/{print}' |bedtools bamtobed | awk -v var0="$chr2_name" -v var1="$HR_chr_2_1" -v var2="$HR_chr_2_2" '{ if ($1 == var0 && $2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"HR_chr_2":"HR_chr_2")} 1' > "$output_readID_HR_chr_2"
+
+```
+
+using the file ID I extracted and converted the respective reads to fasta files.
+for the junctions: 
+```{bash, echo=F, eval=F}
+
+input_fastq=/home/acuenod/scratch/household/01_data/00_reads/fastq/"$sample".fastq.gz
+# define variables for junction1
+read_id_file_junction1=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction1.txt
+awk -F' ' '{print $1}' "$read_id_file_junction1" > /lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction1_names_tmp.txt
+read_id_junction1=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction1_names_tmp.txt
+output_fasta_junction1=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/fasta_from_reads/"$sample"_junction1.fasta
+
+# define variables for junction2
+read_id_file_junction2=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction2.txt
+awk -F' ' '{print $1}' "$read_id_file_junction2" > /lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction2_names_tmp.txt
+read_id_junction2=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction2_names_tmp.txt
+output_fasta_junction2=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/fasta_from_reads/"$sample"_junction2.fasta
+
+# load packages
+ml nixpkgs/16.09  gcc/7.3.0 seqtk/1.3
+# extract reads spanning junction1
+seqtk subseq "$input_fastq" "$read_id_junction1" | seqtk seq -a - > "$output_fasta_junction1"
+# extract reads spanning junction2
+seqtk subseq "$input_fastq" "$read_id_junction2" | seqtk seq -a - > "$output_fasta_junction2"
+
+rm "$read_id_junction1"
+rm "$read_id_junction2"
+
+```
+
+For the HR region on the chromosome: 
+```{bash. echo=F, eval=F}
+#load apptainer module 
+ml  StdEnv/2020 samtools/1.17
+
+input=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/read_depth_2chr_at_junction/readmapping/"$sample".sorted.bam
+input_bed_junction=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/135Vc06_junctions_extended_HR_13087.bed #all were mapped agains 135Vc06 (junction position always stays the same)
+output_bed=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/beds_out/"$sample".bed
+output_bed_no_inserts=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/beds_out/"$sample"_no_inserts_larger_1000.bed
+output_readID_junction_1=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction1.txt
+output_readID_junction_2=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/out/"$sample"_reads_spanning_junction2.txt
+
+
+# bam to bed
+ml bedtools/2.29.2
+# convert bam to bed and filter bed for reads. remove duplicated reads and non-primary alignments
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |bedtools bamtobed > "$output_bed"
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}\D)/' |bedtools bamtobed > "$output_bed_no_inserts"
+
+#bedtools bamtobed -i "$input" > "$output_bed"
+# extract reads spanning junction 1
+junction_1_1=$(awk '$4== "junction_1" {print $2}' "$input_bed_junction")
+junction_1_2=$(awk '$4== "junction_1" {print $3}' "$input_bed_junction")
+#bedtools bamtobed -i "$input" | awk -v var1="$junction_1_1" -v var2="$junction_1_2" '{ if ($2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"junction_1":"junction_1")} 1' > "$output_readID_junction_1"
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP | awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}D)/{print}' | bedtools bamtobed | awk -v var1="$junction_1_1" -v var2="$junction_1_2" '{ if ($2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"junction_1":"junction_1")} 1' > "$output_readID_junction_1"
+
+# extract reads spanning junction 1
+junction_2_1=$(awk '$4== "junction_2" {print $2}' "$input_bed_junction")
+junction_2_2=$(awk '$4== "junction_2" {print $3}' "$input_bed_junction")
+samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP | awk 'substr($0,1,1)=="@" || $6 !~ /([0-9]{4,}D)/{print}' | bedtools bamtobed | awk -v var1="$junction_2_1" -v var2="$junction_2_2" '{ if ($2 <= var1  && $3 >= var2) print $4 }'  | awk '!seen[$0]++' | awk '{$1 = $1 OFS (NR==1?"junction_2":"junction_2")} 1' > "$output_readID_junction_2"
+
+```
+
+To check if these are genuin read or of these might be hybrid reads (then thy would have an adapter sequence where merged), I blasted the adapter sequences agains these fastas: 
+
+```{bash, echo=F, eval=F}
+
+db_dir=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/spanning_junction_adapter/fasta_from_reads/
+query_dir=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/spanning_junction_adapter/adapters/
+out_dir=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/spanning_junction_adapter/blastn_adapters_out/
+
+cat "$db_dir"/*.f* > "$db_dir"/reads_spanning_junction.fasta
+makeblastdb -in "$db_dir"/reads_spanning_junction.fasta -dbtype nucl -out "$db_dir"/reads_spanning_junction
+
+# run blast
+for file in $(ls "$query_dir"/*.fasta)
+do
+  query_name_temp="${file/%.f*/}"
+  query_name="${query_name_temp/*\//}"
+  echo "${query_name}"
+#  blastn -query "${file}" -db "$db_dir"/reads_mapping_3rd_contig \
+#  blastn -query "${file}" -db "$db_dir"/short_contig \
+  blastn -query "${file}" -db "$db_dir"/reads_spanning_junction \
+  -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend qseq slen sstart send sstrand sseq' \
+  -max_target_seqs 100000 -out "$out_dir"/"${query_name}".tab # for the TLC fkanking use 100000 as max target
+#   -max_target_seqs 1000 -out "$out_dir"/"${query_name}".tab
+done
+```
+
+Eval in 'eval_read_count_HR.R'. I export all read ID in which an adapter was found at least 1 time. 
+I then remove the read ID of reads with adapter and count again: 
+
+```{bash, echo=F, eval=F}
+#for the non-fused HR
+cd /home/acuenod/scratch/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused
+
+for file in $(ls out/1*txt|sed 's/out\///g')
+do
+  echo "$file"
+  grep -vf  /lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_adapter_found.txt out/"$file" > out_exclude_reads_w_adapters/"$file"
+done
+
+cd out_exclude_reads_w_adapters
+wc -l * >  read_count_spanning_HR_non-fused_adapter_excl.txt
+
+# for the junctions
+cd /lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR
+
+for file in $(ls out/1*txt|sed 's/out\///g')
+do
+  echo "$file"
+  grep -vf  /lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_adapter_found.txt out/"$file" > out_exclude_reads_w_adapters/"$file"
+done
+
+cd out_exclude_reads_w_adapters
+wc -l * >  read_count_spanning_HR_junction_adapter_excl.txt
+
+
+```
+
+## Pathogenicity islands: 
+Flanking sides:
+GCF_003097695.1 was downloaded today from NCBI Refseq. This is Vibrio cholerae strain A1552 including the annotation used in the Jaskólska 2022 paper. 
+- These are the pathogenicity islands I would like to extract.  
+        - VPI-1: VC0817-VC0847 
+        The gene numbers for VPI-1 come from here
+        (https://journals.asm.org/doi/10.1128/jb.00704-15?url_ver=Z39.88-2003&rfr_id=ori%3Arid%3Acrossref.org&rfr_dat=cr_pub++0pubmed),
+        I am not 100% sure if this is correct. same gene map ID numbers used
+        here: https://www.frontiersin.org/files/Articles/561296/fcimb-10-561296-HTML-r1/image_m/fcimb-10-561296-t002.jpg
+        and fits the gene numbering of this genome. Found more refs, its the
+        same numberin everywhere. (Gene map ID?) 
+        - VPI-2: VC1757-VC181 (ddmDE: VC1771-VC1770)
+        - VSP-I: VC0174-VC0186 (Numbering comes from here: https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1010250)
+        - VSP-II: VC0489-VC0517 (ddmABC: VC0492-VC0490)
+--> extract the flanking regions of these from the reference genome and blast
+these. --> get location of islands and extract these. 
+
+I blasted these flanking sides against all. For one genome (114Vc01) I created bed files of the pathogenicity island location (between flaking sides) and extracted them using the following: 
+
+```{bash, echo=F, eval=F}
+ml bedtools/2.29.2
+input_fasta=/home/acuenod/scratch/household/01_data/01_assemblies/114Vc01.fasta
+
+input_bed=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VSP-I_114Vc01.bed
+output=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VSP-I_114Vc01.fasta
+# Include -s flag, forces strandedness. If the feature occupies the antisense strand, the sequence will be reverse complemented
+bedtools getfasta -fi "$input_fasta" -bed "$input_bed" -fo "$output" -s
+
+input_bed=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VSP-II_114Vc01.bed
+output=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VSP-II_114Vc01.fasta
+bedtools getfasta -fi "$input_fasta" -bed "$input_bed" -fo "$output" -s
+
+input_bed=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VPI-1_114Vc01.bed
+output=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VPI-1_114Vc01.fasta
+bedtools getfasta -fi "$input_fasta" -bed "$input_bed" -fo "$output" -s
+
+
+input_bed=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VPI-2_114Vc01.bed
+output=/lustre04/scratch/acuenod/household/01_data/05_blast/output/VP/VPI-2_114Vc01.fasta
+bedtools getfasta -fi "$input_fasta" -bed "$input_bed" -fo "$output" -s
+```
+
+I could then use the outputs to screen these in all genomes using blastn. 
+
+
+# Analysis of publicly available sequence data
+## Short reads
+### Assembly and QC
+Reads are assembled using Spades via Unicycler and Quality controlled via Quast, screened for contamination using Metaphlan and annotated via bakta:
+
+```{bash, echo=F, eval=F}
+
+# set directory where the metaphlan database is copied to (ther database has to live in scratch and can be copied from '/lustre03/project/6077363/GROUP/01_db/metaphlan_databases.tar.gz' and needs to be tar unzipped before usage)
+metaphlan_db_dir=/scratch/acuenod/metaphlan_databases/
+# set directory where the virtual environmets 'unicycler' and 'metaphlan' are copied to. Both can be copied from '/lustre03/project/6077363/GROUP/02_software/01_tools/venvs/' 
+venv_dir=$HOME/software/venvs
+bakta_db=/lustre03/project/6077363/GROUP/01_db/bakta/
+
+# unload all
+ml purge
+
+# define the variable 'sample_id'from the 'array' defined above
+export sample_id=${array["$SLURM_ARRAY_TASK_ID"]}
+
+# assign raw reads
+raw_R1=../reads/"$sample_id"_1.fastq.gz
+raw_R2=../reads/"$sample_id"_2.fastq.gz
+
+# trim reads using trimmomatic
+mkdir -p results/"$sample_id"/0_trimming
+export _JAVA_OPTIONS="-Xmx10g"
+module load trimmomatic/0.39 # load module
+java -jar $EBROOTTRIMMOMATIC/trimmomatic-0.39.jar PE -threads "$SLURM_CPUS_PER_TASK" -phred33 "$raw_R1" "$raw_R2" results/"$sample_id"/0_trimming/r1.fastq.gz results/"$sample_id"/0_trimming/r1.not-paired.fastq.gz results/"$sample_id"/0_trimming/r2.fastq.gz results/"$sample_id"/0_trimming/r2.not-paired.fastq.gz ILLUMINACLIP:TruSeq3-PE:2:30:10 SLIDINGWINDOW:4:12 MINLEN:100 2> results/"$sample_id"/0_trimming/quality_read_trimm_info
+module unload trimmomatic/0.39
+
+# assigne trimmed reads to new variable
+R1=results/"$sample_id"/0_trimming/r1.fastq.gz
+R2=results/"$sample_id"/0_trimming/r2.fastq.gz
+
+# assemble using spades via unicycler
+mkdir -p results/"$sample_id"/1_unicycler
+# load modules
+source "$venv_dir"/unicycler/bin/activate
+module load StdEnv/2020  gcc/9.3.0
+module load blast+/2.13.0
+module load spades/3.15.4
+unicycler -t "$SLURM_CPUS_PER_TASK" -1 "$R1" -2 "$R2" -o results/"$sample_id"/1_unicycler # optional long reads #  -l ../reads/"$sample_id".fastq.gz
+deactivate
+module unload blast+/2.13.0
+module unload spades/3.15.4
+
+# annotate using bakta
+module load StdEnv/2020  gcc/9.3.0 trnascan-se/2.0.12
+module load aragorn/1.2.41
+module load infernal/1.1.4
+module load hmmer/3.3.2
+module load diamond/2.0.15
+module load blast+/2.13.0
+module load circos/0.69-9
+# add piler and amrfinder+ commands to path
+export PATH=/home/acuenod/software/venvs/amr:/home/acuenod/software/venvs/pilercr1.06:$PATH
+source "$venv_dir"/bakta/bin/activate
+bakta  --verbose --db "$bakta_db" results/"$sample_id"/1_unicycler/assembly.fasta --output results/"$sample_id"/2_annotation --force
+deactivate
+
+mkdir -p results/"$sample_id"/3_quality
+
+#get assembly stats using quast
+module load quast/5.0.2
+quast --min-contig 0 -o results/"$sample_id"/3_quality/quast/ results/"$sample_id"/2_annotation/"$sample_id".fna
+module load quast/5.0.2
+
+# Assign species and check for containations with Metaphlan
+# load modules
+module load gcc blast samtools bedtools bowtie2 python/3.10
+source "$venv_dir"/metaphlan/bin/activate
+mkdir -p results/"$sample_id"/3_quality/Metaphlan2
+#count the number of reads
+n_reads_R1=$(echo $(cat "$R1"|wc -l)/4|bc) # for forward reads
+n_reads_R2=$(echo $(cat "$R2"|wc -l)/4|bc) # for reverse reads
+n_reads=$(echo "$(($n_reads_R1+$n_reads_R2))") # add both
+# map reads to db
+bowtie2 --sam-no-hd --sam-no-sq --no-unal --very-sensitive -S results/"$sample_id"/3_quality/Metaphlan2/alignment.sam -x "$metaphlan_db_dir"/mpa_vOct22_CHOCOPhlAnSGB_202212 -1 "$R1"  -2 "$R2"
+#run meaphlan from sam file
+metaphlan results/"$sample_id"/3_quality/Metaphlan2/alignment.sam --input_type sam --index mpa_vOct22_CHOCOPhlAnSGB_202212  --bowtie2db "$metaphlan_db_dir" --nproc "$SLURM_CPUS_PER_TASK" --nreads "$n_reads" --offline> results/"$sample_id"/3_quality/Metaphlan2/profiled_metagenome.txt 2> results/"$sample_id"/3_quality/Metaphlan2/error.txt
+deactivate
+module unload gcc blast samtools bedtools bowtie2 python/3.10
+
+#remap the trimmed reads to the assembly (using bwa) to calculate read depth
+R1=results/"$sample_id"/0_trimming/r1.fastq.gz
+R2=results/"$sample_id"/0_trimming/r2.fastq.gz
+
+# load modules
+module load bwa/0.7.17
+module load samtools/1.17
+mkdir -p results/"$sample_id"/3_quality/remapping/mapping/
+# create a symlink of the assembly to the mapping dir, so that the sam file will be in the correct dir (somehow could not redirect?)
+assemblypath=$(realpath results/"$sample_id"/2_annotation/"$sample_id".fna)
+ln -s "$assemblypath" results/"$sample_id"/3_quality/remapping/mapping/"$sample_id".fna
+# index assembly
+bwa index results/"$sample_id"/3_quality/remapping/mapping/"$sample_id".fna results/"$sample_id"/3_quality/remapping/mapping/"$sample_id".fna
+# map
+bwa mem -t "$SLURM_CPUS_PER_TASK" results/"$sample_id"/3_quality/remapping/mapping/"$sample_id".fna "$R1" "$R2" > results/"$sample_id"/3_quality/remapping/mapping/alingnment.sam
+# sort the sam file and convert to bam
+samtools sort -@ "$SLURM_CPUS_PER_TASK" -T results/"$sample_id"/3_quality/remapping/mapping/temp_sort -o results/"$sample_id"/3_quality/remapping/mapping/alingnment.bam results/"$sample_id"/3_quality/remapping/mapping/alingnment.sam
+# remove duplicates (not sure?) and index
+samtools rmdup results/"$sample_id"/3_quality/remapping/mapping/alingnment.bam results/"$sample_id"/3_quality/remapping/mapping/alingnment.removed_duplicates.bam
+samtools index results/"$sample_id"/3_quality/remapping/mapping/alingnment.removed_duplicates.bam
+# calculate read depth
+samtools depth -aa results/"$sample_id"/3_quality/remapping/mapping/alingnment.removed_duplicates.bam | awk '{sum+=$3;count+=1;}END{print sum/count;}'  > results/"$sample_id"/3_quality/remapping/coverage.tab
+module unload bwa/0.7.17
+module unload samtools/1.17
+
+
+# remove files no longer needed
+rm results/"$sample_id"/0_trimming/*.fastq.gz
+rm results/"$sample_id"/3_quality/Metaphlan2/alignment.sam
+rm results/"$sample_id"/3_quality/remapping/mapping/*
+
+# summarise quality stats
+mkdir results/"$sample_id"/3_quality/summary
+# fetch reads quality from trimmomatics out
+awk '/Input Read Pairs/{print $8}' results/"$sample_id"/0_trimming/quality_read_trimm_info | awk -F '%'  '{print $1}' | awk -F '('  '{print $2}' > results/"$sample_id"/3_quality/summary/1.txt
+# fetch the read depth from the remapping
+cp results/"$sample_id"/3_quality/remapping/coverage.tab results/"$sample_id"/3_quality/summary/2.txt
+# fetch coontig count from quast
+tail -n 1 results/"$sample_id"/3_quality/quast/transposed_report.tsv | awk '{print $14 "\t" $16  "\t" $18  "\t" $17 }' > results/"$sample_id"/3_quality/summary/3.txt
+# fetch metaphlan profiles
+grep "s__" results/"$sample_id"/3_quality/Metaphlan2/profiled_metagenome.txt  | grep -v "t__" | awk -F '[|\t]+' '{print $7,"\011"$15}' | awk -F __ '{print $2}'| head -n 1 > results/"$sample_id"/3_quality/summary/4.txt
+
+# summaris quality stats for all samples
+paste <(echo "$sample_id") results/"$sample_id"/3_quality/summary/*.txt > results/"$sample_id"/3_quality/summary/"$sample_id".tab
+echo -e "Sample\tRead_quality\tRead_depth\tContig_count\tTotal_length\tN50\tGC_percent\tAlignment_length\tMetaPhlAn2_species\tMetaPhlAn2_purity" > quality.tab
+cat results/*/3_quality/summary/*.tab >> quality.tab
+# count the number of samples analysed
+let sample_count=$(grep -c "" quality.tab)-1
+echo "analysed_samples: $sample_count" >> quality.tab
+# convert tab to csv for export
+sed 's/,/;/' quality.tab | sed 's/\t/,/g' > quality.csv
+
+```
+
+
+### Phylogeny
+I used panaroo to compile the core genome alignment from which a tree was created using fastree. 
+panaroo: 
+
+```{bash, echo=F, eval=F}
+input_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/gff3
+output_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/24-02_panaroo_out/
+
+panaroo -i "$input_dir"/*.gff3 -o "$output_dir" --clean-mode moderate --remove-invalid-genes --threads 16 --alignment core --aligner mafft
+
+```
+
+snp-sites and fasttree: 
+```{bash, echo=F, eval=F}
+ml StdEnv/2020 snp-sites/2.5.1
+snp-sites -c  /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/panaroo_out/core_gene_alignment_filtered.aln > /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/panaroo_out/core_gene_alignment_filtered-snp-sites.aln
+
+# load module
+ml StdEnv/2020 fasttree/2.1.11
+
+
+FastTree -gtr -nt /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/panaroo_out/core_gene_alignment_filtered-snp-sites.aln > /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/panaroo_out/fasttree
+
+
+```
+
+### Lineage assignment
+Is 7PET to determine whether a genome belongs to the 7PET sublineage: 
+
+```{bash, echo=F, eval=F}
+# load ariva venv
+source /home/acuenod/software/venvs/ariba/bin/activate
+# load modules (dependencies for ariba)
+ml StdEnv/2020 python/3.10.2 bowtie2/2.4.1 cd-hit/4.8.1 mummer/4.0.0beta2
+# for snippy
+ml java/13.0.2
+# other
+ml gcc/9.3.0 blast+/2.13.0
+ml r/4.0.0
+ml mash/2.3
+
+/home/acuenod/software/venvs/IsIt7PET/find7PET_ToolPaths_adapted_AC.sh /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/IsIt7PET/input/read_paths.tab
+
+```
+
+To identify to which 7PET sublineage the genomes are closest to, I used snippy. I assigned the lineage of the reference for which the lowest number of SNV were identified: 
+
+```{bash, echo=F, eval=F, echo=F, eval=F}
+threads=16
+
+# define the variable 'sample_id'from the 'array' defined above
+export sample_id=${array["$SLURM_ARRAY_TASK_ID"]}
+
+## define read directory
+read_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/fastqref_dir=/lustre04/scratch/acuenod/household/01_data/17_lineage_assignment/refs/fasta/
+outdir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/medaka_lineage/out/
+
+# load modules
+ml java/17.0.2
+
+for ref in $(ls "$ref_dir")
+do
+# use minqual 100, as its all illumina data
+/home/acuenod/software/scripts/snippy/bin/snippy --cpus 16 --outdir "$outdir"/"$sample_id"/"$ref" --ref "$ref_dir"/"$ref" --R1 "$read_dir"/"$sample_id"_1.fastq.gz --R2 "$read_dir"/"$sample_id"_2.fastq.gz --mincov 10 --minfrac 0.7 --minqual 100 --force
+done
+
+# use the following to summarise the number of SNV per reference: 
+cd /home/acuenod/scratch/household/01_data/16_public_seqs/highQ_short_read_datasets/medaka_lineage/out
+for sample in $(ls .)
+do
+  echo ${sample}
+  for ref in $(ls ${sample})
+  do
+    echo ${ref}
+    #ls 2>&1 ${sample}/${ref}/snps.txt >> log.txt
+    tail -n 4 ${sample}/${ref}/snps.txt | awk -F "\t" -v samplezz="$sample" -v refzz="$ref" '{OFS="\t"} {print $0, samplezz, refzz}' > ${sample}/${ref}/snps_1.txt
+  done
+done
+
+cat */*/snps_1.txt > all_snps_1.txt
+sed -i '1i \ variant\tsample\treference' all_snps_1.txt
+
+```
+
+
+
+
+### Screening homologous sequences (HS1)
+I used the following to screen HS1 and VPI-I in all public shoort read sequences
+
+```{bash, echo=F, eval=F}
+db=/home/acuenod/scratch/household/01_data/16_public_seqs/highQ_short_read_datasets/blast/input/db/public_Vc_db
+query=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/blast/input/query/Vc_over_10000_chr_overlap_1.fasta
+out=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/blast/output/blastout_HR_2_all_shortread_public.tab
+
+blastn -query "$query" -db  "$db" \
+  -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send' \
+  -max_target_seqs 5000 -out "$out"
+
+```
+
+from these blastoutputs, I created bed files using 'blast_out_to_bed_HR_public.R'.
+I then calculated the read depths in these (using the bamfiles previously created) with:
+
+```{bash, echo=F, eval=F}
+#load apptainer module 
+module load bwa/0.7.17
+module load samtools/1.17
+
+assemblypath=/home/acuenod/scratch/household/01_data/16_public_seqs/highQ_short_read_datasets/fasta_all
+readpath=/home/acuenod/scratch/household/01_data/16_public_seqs/highQ_short_read_datasets/fastq_all
+calc_read_depth_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/readmapping/calc_read_depth
+mapping_reads_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/readmapping/calc_read_depth
+input_bed=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/readmapping/calc_read_depth/location_HR2.bed
+
+
+## index assembly
+#bwa index "$assemblypath"/"$sample".fna "$assemblypath"/"$sample".fna
+## map
+#bwa mem -t "$SLURM_CPUS_PER_TASK" "$assemblypath"/"$sample".fna "$readpath"/"$sample"_1.fastq.gz "$readpath"/"$sample"_2.fastq.gz > "$mapping_reads_dir"/"$sample".sam
+## sort the sam file and convert to bam
+#samtools sort -@ "$SLURM_CPUS_PER_TASK" -T "$mapping_reads_dir"/tempsort -o  "$mapping_reads_dir"/"$sample".bam  "$mapping_reads_dir"/"$sample".sam
+## remove duplicates (not sure?) and index
+#samtools rmdup "$mapping_reads_dir"/"$sample".bam "$mapping_reads_dir"/"$sample".removed_duplicates.bam
+#samtools index "$mapping_reads_dir"/"$sample".removed_duplicates.bam
+#samtools sort -@ "$SLURM_CPUS_PER_TASK" "$mapping_reads_dir"/"$sample".removed_duplicates.bam > "$mapping_reads_dir"/"$sample".removed_duplicates.sorted.bam
+
+
+## calculate read depth
+# samtools depth -aa "$mapping_reads_dir"/"$sample".removed_duplicates.sorted.bam   > "$calc_read_depth_dir"/"$sample"_all.coverage
+for sample in $(cat /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/HR2_samples.txt)
+do
+    ## calculate coverage of contig_2 seq region 
+    samtools depth -b "$input_bed"  "$mapping_reads_dir"/"$sample".removed_duplicates.bam > "$calc_read_depth_dir"/"$sample"_HR2_region.coverage
+    # summarise average coverage
+    full_cov=$(awk -F'\t' '{ sum += $3 } END { print sum / NR }' "$calc_read_depth_dir"/"$sample"_all.coverage)
+    subset_cov=$(awk -F'\t' '{ sum += $3 } END { print sum / NR }' "$calc_read_depth_dir"/"$sample"_HR_region.coverage)
+    subset2_cov=$(awk -F'\t' '{ sum += $3 } END { print sum / NR }' "$calc_read_depth_dir"/"$sample"_HR2_region.coverage)
+    echo -e   "Average_coverage_full_genome\tAverage_coverage_of_HR_region\tAverage_coverage_of_HR2_region"  > "$calc_read_depth_dir"/"$sample"_average_coverage_both.tab
+    printf "%s\t%s\t" "$full_cov" "$subset_cov"  "$subset2_cov" >> "$calc_read_depth_dir"/"$sample"_average_coverage_both.tab
+done
+
+```
+
+
+
+and summarised these using the following: 
+```{bash, echo=F, eval=F}
+cd /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/readmapping/calc_read_depth/
+# add filename to al as column
+for file in $(ls *_average_coverage_both.tab)
+do 
+  samplename="${file/%_average_coverage_both.tab/}"
+  echo "$samplename"
+  awk 'NR == 1 {print $0 "\tname_file"; next;}{print $0 "\t" FILENAME;}' "$file" > "$samplename"_average_coverage_both2.tab
+done
+# concatenate all
+cat *_average_coverage_both2.tab > all_average_coverage_both.tab
+# remove all but first header line
+sed -i -e '/^Average\_coverage/{x;/./!{x;h;b;};d}' all_average_coverage_both.tab
+rm *_average_coverage_both2.tab
+
+```
+
+
+## Long reads
+### QC
+I QCed the assembled long read Vibrionales spp. using the following: 
+
+```{bash, echo=F, eval=F}
+# set directory where environments are installed to, eg nanostats
+venv_dir=/home/acuenod/software/venvs/
+
+# unload all
+ml purge
+
+# define the variable 'sample_id'from the 'array' defined above
+export sample_id=${array["$SLURM_ARRAY_TASK_ID"]}
+
+# go to folder
+cd /home/acuenod/scratch/household/01_data/16_public_seqs/long_reads
+#cd /home/acuenod/scratch/ONT
+
+# assign reads to new variable
+R=00_reads/"$sample_id".fastq.gz
+
+# assign assembly to variable
+assembly=assemblies/fasta/"$sample_id".fasta
+#assembly=01_assemblies/"$sample_id"/"$sample_id".fasta
+
+mkdir -p 02_quality/"$sample_id"
+
+# get read stats using nanostat
+source "$venv_dir"/nanostats/bin/activate
+NanoStat -t "$SLURM_CPUS_PER_TASK" --fastq "$R" --outdir 02_quality/"$sample_id"/nanostat/ --name "$sample_id" --tsv
+deactivate
+
+## get read stats using seqtk
+#ml nixpkgs/16.09  gcc/7.3.0 seqtk/1.3
+#mkdir 02_quality/"$sample_id"/seqtk_fqchk
+#seqtk fqchk "$R" > 02_quality/"$sample_id"/seqtk_fqchk/"$sample_id".tab
+#module unload nixpkgs/16.09  gcc/7.3.0 seqtk/1.3
+
+
+##get assembly stats using quast
+module load StdEnv/2020  gcc/9.3.0 quast/5.0.2
+quast --min-contig 0 -o 02_quality/"$sample_id"/quast/ "$assembly"
+module unload quast/5.0.2
+
+#remap the reads to the assembly (using minimap) to calculate read depth
+# load modules
+module load bwa/0.7.17
+module load samtools/1.17
+module load minimap2/2.24
+mkdir -p 02_quality/"$sample_id"/remapping/mapping/
+cp "$assembly" 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna
+# index assembly
+bwa index 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna
+# map
+minimap2 -ax map-ont -t "$SLURM_CPUS_PER_TASK" 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna "$R"  > 02_quality/"$sample_id"/remapping/mapping/alingnment.sam
+# sort the sam file and convert to bam
+samtools sort -@ "$SLURM_CPUS_PER_TASK" -T 02_quality/"$sample_id"/remapping/mapping/temp_sort -o 02_quality/"$sample_id"/remapping/mapping/alingnment.bam 02_quality/"$sample_id"/remapping/mapping/alingnment.sam
+# remove duplicates (not sure?) and index
+samtools rmdup 02_quality/"$sample_id"/remapping/mapping/alingnment.bam 02_quality/"$sample_id"/remapping/mapping/alingnment.removed_duplicates.bam
+samtools index 02_quality/"$sample_id"/remapping/mapping/alingnment.removed_duplicates.bam
+# calculate read depth
+samtools depth -aa 02_quality/"$sample_id"/remapping/mapping/alingnment.removed_duplicates.bam | awk '{sum+=$3;count+=1;}END{print sum/count;}'  > 02_quality/"$sample_id"/remapping/coverage.tab
+module unload bwa/0.7.17
+module unload samtools/1.17
+rm 02_quality/"$sample_id"/remapping/mapping/"$sample_id".fna
+
+### remove files no longer needed
+##rm results/"$sample_id"/3_quality/Metaphlan2/alignment.sam
+##rm results/"$sample_id"/3_quality/remapping/mapping/*
+
+## summarise quality stats
+mkdir 02_quality/"$sample_id"/summary
+## fetch median read length, n50 and median read quality from nanostats
+awk '$1 == "median_read_length" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1a.txt
+awk '$1 == "n50" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1b.txt
+awk '$1 == "median_qual" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1c.txt
+awk '$1 == "mean_qual" {print $2}' 02_quality/"$sample_id"/nanostat/"$sample_id" > 02_quality/"$sample_id"/summary/1d.txt
+awk '$1 == "ALL" {print $8}' 02_quality/"$sample_id"/seqtk_fqchk/"$sample_id".tab > 02_quality/"$sample_id"/summary/1e.txt
+# fetch the read depth from the remapping
+cp 02_quality/"$sample_id"/remapping/coverage.tab 02_quality/"$sample_id"/summary/2.txt
+# fetch coontig count from quast
+tail -n 1 02_quality/"$sample_id"/quast/transposed_report.tsv | awk '{print $14 "\t" $16  "\t" $18  "\t" $17 }' > 02_quality/"$sample_id"/summary/3.txt
+# summaris quality stats for all samples
+paste <(echo "$sample_id") 02_quality/"$sample_id"/summary/*.txt > 02_quality/"$sample_id"/summary/"$sample_id".tab
+echo -e "Sample\tMedian_read_length\tN50_reads\tMedian_read_quality_nanostat\tMean_read_quality_nanostat\tMean_read_quality_seqtk\tRead_depth\tContig_count\tTotal_length_assembly\tN50_assembly\tGC_percent" >  02_quality/quality.tab
+cat 02_quality/*/summary/*.tab >> 02_quality/quality.tab
+# count the number of samples analysed
+let sample_count=$(grep -c "" 02_quality/quality.tab)-1
+echo "analysed_samples: $sample_count" >> 02_quality/quality.tab
+# convert tab to csv for export
+sed 's/,/;/' 02_quality/quality.tab | sed 's/\t/,/g' > 02_quality/quality.csv
+```
+
+### species classification
+I used GTDB-tk for species assignment
+
+```{bash, echo=F, eval=D}
+
+
+# load modules
+ml StdEnv/2020 prodigal/2.6.3
+ml gcc/9.3.0 hmmer/3.3.2
+ml pplacer/1.1.alpha19
+ml fastani/1.32
+ml fasttree/2.1.11
+ml mash/2.3
+ml python/3.10
+
+source /home/acuenod/software/venvs/GTDB-Tk/bin/activate
+
+# give path to ref data 
+#export GTDBTK_DATA_PATH=/lustre04/scratch/acuenod/release214
+export GTDBTK_DATA_PATH=/lustre03/project/6033517/acuenod/household_current/gtdbtk_db/release214
+gtdbtk classify_wf --cpus 8 --skip_ani_screen --extension fasta --genome_dir /home/acuenod/scratch/household/01_data/16_public_seqs/long_reads/assemblies/fasta_added/ --out_dir /lustre03/project/6033517/acuenod/household_current/GTDB-Tk_out_2
+```
+ 
+And kraken/bracken to screen for contamintations (I used this on the assemblies and not on the reads, which is probably not ideal)
+
+```{bash}
+# kraken
+db=/lustre03/project/6033517/acuenod/household_current/kraken_db/lustre04/scratch/acuenod/kraken2_db
+assembly_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/assemblies/fasta_added
+out_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/kraken_out_added
+
+for sample in $(ls "$assembly_dir"/*fasta|sed 's/.*fasta\_added\///g'| sed 's/\.fasta//g')
+do
+  echo "$sample"
+  kraken2 --db "$db" "$assembly_dir"/"$sample".fasta  --threads 8 --report "$out_dir"/"$sample"_kraken2_report.txt > "$out_dir"/"$sample"_kraken2_report.txt
+done
+
+# bracken
+# load modules
+ml StdEnv/2020  gcc/9.3.0 bracken/2.6.0
+
+export sample_id=${array["$SLURM_ARRAY_TASK_ID"]}
+
+bracken_out2=/lustre03/project/6033517/acuenod/household_current/bracken_out
+kraken_out2=/lustre03/project/6033517/acuenod/household_current/kraken_out
+
+bracken -d /home/acuenod/scratch/kraken2_db -i "$kraken_out2"/"$sample_id"_kraken2_report.txt -o "$bracken_out2"/"$sample_id".bracken -r 150 -l S
+
+
+```
+
+ 
+### compare chr 1 and chr 2
+#### blast
+I identified assemblies with two large contigs (corresoponding to two chromosomes) in 'public_long_reads.R'
+I will next blast chr.2 agains chr.1 for each sample. 
+Therefore, I extracted all chr.1 and chr.2 names in 'public_long_reads.R' and extracted these from the assemblies using the following (in an interactive job)
+
+```{bash, echo=F, eval=F}
+ml nixpkgs/16.09  gcc/7.3.0 seqtk/1.3
+
+assembly_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/assemblies/fasta
+chr1_names=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/blast_chr/chr1/chr1_names.txt
+chr1_out_dir=/home/acuenod/scratch/household/01_data/16_public_seqs/long_reads/blast_chr/chr1
+chr2_names=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/blast_chr/chr2/chr2_names.txt
+chr2_out_dir=/home/acuenod/scratch/household/01_data/16_public_seqs/long_reads/blast_chr/chr2
+
+
+for sample in  $(cat /lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/blast_chr/assemblies_2_2chr.txt)
+do
+  echo "$sample"
+  seqtk subseq "$assembly_dir"/"$sample".fasta "$chr1_names" > "$chr1_out_dir"/"$sample"_chr_1.fasta
+  seqtk subseq "$assembly_dir"/"$sample".fasta "$chr2_names" > "$chr2_out_dir"/"$sample"_chr_2.fasta
+done
+```
+
+For the actual blast: 
+
+```{bash, echo=F, eval=F}
+ml StdEnv/2020 gcc/9.3.0 blast+/2.13.0
+
+chr1_dir=/home/acuenod/scratch/household/01_data/16_public_seqs/long_reads/blast_chr/chr1
+chr2_dir=/home/acuenod/scratch/household/01_data/16_public_seqs/long_reads/blast_chr/chr2
+outdir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/blast_chr/blastout
+
+for sample in  $(cat /lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/blast_chr/assemblies_2chr.txt)
+do
+  echo "$sample"
+  rm "$outdir"/chr1_db*
+  makeblastdb -in "$chr1_dir"/"$sample"_chr_1.fasta  -dbtype nucl -out "$outdir"/chr1_db
+  blastn -query "$chr2_dir"/"$sample"_chr_2.fasta -db  "$outdir"/chr1_db \
+  -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send qseq sseq' \
+  -max_target_seqs 5000 -out "$outdir"/"$sample"_chr_blastout.tab
+done
+
+rm "$outdir"/chr1_db*
+
+```
