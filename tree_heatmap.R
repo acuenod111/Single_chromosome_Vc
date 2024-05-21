@@ -12,10 +12,10 @@ library('colorspace')
 setwd('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/02_scripts/check/')
 
 # import basic metadata 
-meta_basic <- read.csv2("input_data//very_basic_meta_.csv", sep = ',')
+meta_basic <- read.csv2("input_data/very_basic_meta_.csv", sep = ',')
 
 # import the phylogenetic tree (RaxML SNP tree)
-tree <- read.tree("input_data//RAxML_bestTree.raxmltree_all_ref_N16961")
+tree <- read.tree("input_data/RAxML_bestTree.raxmltree_all_ref_N16961")
 
 # extract the sames of the samples (these are 9-10 colony picks per patient, thats why they are called 'colonies' in the following)
 colonies <- as.data.frame(tree$tip.label)
@@ -23,7 +23,7 @@ colnames(colonies) <- 'colony'
 # extract the patient number
 colonies['Individual'] <- gsub('Vc.*', '', colonies$colony)
 colonies <- merge(colonies, meta_basic, by = 'Individual', all.x = T)
-colonies <- colonies[,c("colony","Individual","household","ind_contact", "symp")]
+colonies <- colonies[,c("colony","Individual","household","ind_contact")]
 rownames(colonies) <- colonies$colony
 # check if all match
 setdiff(tree$tip.label, colonies$colony)
@@ -66,25 +66,6 @@ tree_heatmap_1 <- gheatmap(tree_heatmap_1, lineage_plot, width = 0.1, offset = 0
                          colnames=T, legend_title="") + scale_fill_manual(values = c("#FDD58C", "#4763AB", "#B2258F"), na.value = "grey91")
 # add new color (fill) scale, such that a new column can be added using a different color scheme
 tree_heatmap_1 <- tree_heatmap_1 + new_scale_fill()
-
-# import blast hits
-#blast_plots <- read.table('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/01_data/08_seqs_to_screen/outputs/merge_blast_plot.csv', sep=';', header = T)
-#blast_plots$extra.chromosomal.TLC <- NULL
-## add if symptomatic
-##blast_plots <- merge(colonies[,c('colony', 'symp')], blast_plots, by.x = 'colony', by.y = 'strain', all.y = T)
-#
-## check in how many households 1 chr. strains
-#household_check <- merge(blast_plots, plot, by.x = 'strain', by.y = 0)
-#length(unique(household_check[household_check$chr_r == '1',]$household))
-#
-#rownames(blast_plots) <- blast_plots$strain
-#blast_plots$strain <- NULL 
-#blast_plots$chr_r <- as.factor(as.character(blast_plots$chr_r))
-#blast_plots$Ind5_GQ463142.1 <- NULL
-#blast_plots$Ind6_MK165649.1 <- NULL
-#blast_plots$PLE1_KC152960.1 <- NULL
-#blast_plots$chromosomal.TLC <- NULL
-#blast_plots$extra.chromosomal.TLC <- NULL
 
 # import info on how many chromosomes were assembled
 QC <- read.csv2('input_data/QC_extended.csv')

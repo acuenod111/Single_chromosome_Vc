@@ -127,13 +127,16 @@ dist_fusion_unfusion['closest_unfusion_node'] = colnames(dist_fusion_unfusion)[a
 
 # three relatively basal fusion nodes: 871, 901, 656
 # find minimal dist
+p3 +  geom_nodelab(aes(subset=!isTip & transition == 'transition_2to1',
+                       label = nodelab_check))
+fusion_nodes <- p3$data[p3$data$isTip == F & p3$data$transition == 'transition_2to1',]$nodelab_check
 
-dist_fusion_unfusion_min_sel <- dist_fusion_unfusion[dist_fusion_unfusion$fusion_node %in% c(871, 901, 656), c('fusion_node', 'closest_unfusion_node', 'min_dist')]
+dist_fusion_unfusion_min_sel <- dist_fusion_unfusion[dist_fusion_unfusion$fusion_node %in% fusion_nodes, c('fusion_node', 'closest_unfusion_node', 'min_dist')]
 
 # 4133751 is the mean assembly length
-dist_fusion_unfusion_min_sel['Nr_SNV'] <- dist_fusion_unfusion_min_sel$min_dist * 4133751
+dist_fusion_unfusion_min_sel['Nr_SNV'] <- as.numeric(as.character(dist_fusion_unfusion_min_sel$min_dist)) * 4133751
+range(dist_fusion_unfusion_min_sel['Nr_SNV'])
 # In the third wave of the 7PET, the rates of SNP accumulation is estimated to 3.5 / year https://www.nature.com/articles/nature10392
 dist_fusion_unfusion_min_sel['estimated_time'] <- dist_fusion_unfusion_min_sel$Nr_SNV / 3.5
+range(dist_fusion_unfusion_min_sel['estimated_time'])
 
-
-wilcox.test(dist_trans[dist_trans$trans == '1to2',]$dist, dist_trans[dist_trans$trans == '2to1',]$dist)
