@@ -1,6 +1,6 @@
 # Long-read sequencing reveals prevalent chromosome fusion in Vibrio cholerae O1
 This directory contains all scripts used for the analysis in "Long-read sequencing reveals prevalent chromosome fusion in Vibrio cholerae O1". 
-All input data to reproduce the figures and run the R scripts can be found in 'Input_data'. 
+All input data to reproduce the figures and run the R scripts can be downloaded via the OpenScienceFoundation (https://osf.io/xyfvg/). 
 
 ## Abstract 
 Two circular chromosomes are a defining feature of the family Vibrionaceae, including the pathogen V. cholerae, with rare reports of isolates with a single, fused chromosome. Here we report chromosome fusions in clinical V. cholerae isolates, including several independent fusion events stable enough to be transmitted between patients within a household. Fusion occurs in a 12 kilobase pair homologous sequence (HS1) which is shared between the two chromosomes.
