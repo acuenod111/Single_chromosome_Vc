@@ -143,6 +143,8 @@ I used the following for quality control of the flye assemblies:
 
 ```{bash, echo=F, eval=F}
 
+# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+
 # assign reads to new variable
 R=00_reads/fastq/"$sample_id".fastq.gz
 
@@ -604,6 +606,8 @@ Reads are assembled using Spades via Unicycler and Quality controlled via Quast,
 
 ```{bash, echo=F, eval=F}
 
+# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+
 # set directory where the metaphlan database is copied to (ther database has to live in scratch and can be copied from '/lustre03/project/6077363/GROUP/01_db/metaphlan_databases.tar.gz' and needs to be tar unzipped before usage)
 metaphlan_db_dir=/scratch/acuenod/metaphlan_databases/
 # set directory where the virtual environmets 'unicycler' and 'metaphlan' are copied to. Both can be copied from '/lustre03/project/6077363/GROUP/02_software/01_tools/venvs/' 
@@ -905,6 +909,8 @@ rm *_average_coverage_both2.tab
 I QCed the assembled long read Vibrionales spp. using the following: 
 
 ```{bash, echo=F, eval=F}
+# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+
 # set directory where environments are installed to, eg nanostats
 venv_dir=/home/acuenod/software/venvs/
 
