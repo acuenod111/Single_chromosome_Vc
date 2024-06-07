@@ -6,6 +6,7 @@ date: "2024-05-17"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(eval = FALSE)
 ```
 # Sequence analysis of isolates collected for this study
 ## Assembly and Quality control
@@ -14,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 As a check to make sure the fused structure is no assembly error, I assemble 10 of the fused ones (one per patient) and three non-fused ones as controls using trycycler following the tutorial. 
 I subsample each fastq files 12 times using the following: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 # filter reads using filtlong
 /home/acuenod/software/venvs/Filtlong/bin/filtlong --min_length 1000 --keep_percent 95 "$input_dir"/"$sample".fastq.gz > "$filt_dir"/"$sample".fastq.gz
 
@@ -25,7 +26,7 @@ trycycler subsample --reads "$filt_dir"/"$sample".fastq.gz --out_dir "$subsample
 
 Then to assemble, I use flye, raven, miniasm+minipolish and canu as follows: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 array=(mock 111Vc05 112Vc01 113Vc01 114Vc03 117Vc01 119Vc01 120Vc01 121Vc01 134Vc05 135Vc02 114Vc01 128Vc06 142Vc02)
 
 ## define the variable 'sample_id'from the 'array' defined above
@@ -60,7 +61,7 @@ I moved the ones to be excluded to assemblies_excluded.
 
 I next clustered the remaining contigs using: 
 
-```{bash, eval=F, echo=F}
+```{bash, eval=F, echo=T}
 trycycler cluster --assemblies "$assembly_dir"/*fasta --reads "$reads" --out_dir "$cluster_dir"
 ```
 
@@ -68,7 +69,7 @@ trycycler cluster --assemblies "$assembly_dir"/*fasta --reads "$reads" --out_dir
 Trycycler cluster outputs a tree per sample. I consider all clusters as valuable, if they occure in at least two assemblies and are of similar size. 
 134Vc05 could somehow not be opened in figtree, I read the raw newick file instead. On the clusters which were kept, run trycycler reconcile: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 for cluster in $(ls -d ${cluster_dir}/cluster* |sed 's/.*\///g')
 do
   echo ${cluster}
@@ -90,7 +91,7 @@ Then run tryclcler reconcile again.
 
 Then, run trycycler msa and partition the reads with trycycler partition. trycycler msa:
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 for cluster in $(ls -d ${cluster_dir}/cluster* |sed 's/.*\///g')
 do
   echo ${cluster}
@@ -99,7 +100,7 @@ done
 ```
  
  Then trycycler partition:
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 reads=/lustre04/scratch/acuenod/household/01_data/18_trycycler/reads/1_filtered/"$sample".fastq.gz
 cluster_dir=/lustre04/scratch/acuenod/household/01_data/18_trycycler/clusters/"$sample"
 
@@ -109,7 +110,7 @@ trycycler partition --reads "$reads" --cluster_dirs "$cluster_dir"/cluster_* --t
 ```
 
 Then build a consensus: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 reads=/lustre04/scratch/acuenod/household/01_data/18_trycycler/reads/1_filtered/"$sample".fastq.gz
 cluster_dir=/lustre04/scratch/acuenod/household/01_data/18_trycycler/clusters/"$sample"
 
@@ -124,7 +125,7 @@ done
 
 And summarise the consensus
 
-```{bash, echo=F}
+```{bash, echo=T}
 
 for sample in $(ls -d /lustre04/scratch/acuenod/household/01_data/18_trycycler/clusters/1*)
 do
@@ -141,7 +142,7 @@ I used the following for quality control of the flye assemblies:
   - remap all reads to the generated assembly. Use the resulting bam file to calculate the overall read depth 
   - summarise all to one table
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 
 # This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
 
@@ -211,7 +212,7 @@ sed 's/,/;/' 02_quality/quality.tab | sed 's/\t/,/g' > 02_quality/quality.csv
 
 To retrieve information on circularity of the contigs, I summarised all info files from the flye assemblies using the following:
 
-```{bash, eval=FALSE, echo=FALSE}
+```{bash, eval=FALSE, echo=TRUE}
 
 for sample in $(cat /lustre04/scratch/acuenod/household/01_data/samples.txt); do   
   echo "${sample}"
@@ -220,13 +221,13 @@ for sample in $(cat /lustre04/scratch/acuenod/household/01_data/samples.txt); do
 done
 #remove all header lines but first one 
 sed -i -e '/^\#seq\_name/{x;/./!{x;h;b;};d}' all_fly_assembly_info.txt
-````
+```
 
 Evaluate this in plot_QC_ONT.R
 
 ### Annotation
 Each sample was annotated using bakta: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 bakta  --verbose --keep-contig-headers --db "$db" "$input_assembly" --output "$outbut_dir" --force
 ```
 
@@ -242,7 +243,7 @@ To generate a SNV based phylogenetic tree, I did the following:
 - build tree using raxml
 
 Medaka: 
-```{bash, echo=F, eal=F}
+```{bash, echo=T, eal=F}
 ml apptainer
 ## define read directory
 read_dir=/lustre04/scratch/acuenod/household/01_data/00_reads/fastq
@@ -255,7 +256,7 @@ apptainer run -e -B /lustre04/scratch/ /home/acuenod/software/containers/medaka.
 Three files failed repeatadly at the annotation step (120Vc05 130Vc10 145Vc02). (I tried increasing memory (although they are not bigger than other files), but the error remains). 
 I think I do not need the annotation, as I continue with the produced medaka.vcf file which is produced for these without error. Next, I filter these .vcf files (remove indels and build consensus with lowQ SNV masked)
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 # remove indels using vcf tools # ' --recode --recode-INFO-all' is needed, no output is produced otherwise
 ml  StdEnv/2023 vcftools/0.1.16
 vcftools --vcf  "$vcf_raw" --remove-indels --recode --recode-INFO-all --out "$vcf_no_indels"
@@ -272,14 +273,14 @@ bcftools consensus --prefix "$sample" --fasta-ref "$ref_fasta" --mask "$lowQ_sit
 ```
 
 Then to concatenate the consensus per sample using: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 echo ">"$sample"" > /lustre04/scratch/acuenod/household/01_data/11_tree/output/ref_N16961/"$sample"/"$sample"_highQ_variants_no_indels_concat.fasta
 grep -v '>' /lustre04/scratch/acuenod/household/01_data/11_tree/output/ref_N16961/"$sample"/"$sample"_highQ_variants_no_indels.fasta >> /lustre04/scratch/acuenod/household/01_data/11_tree/output/ref_N16961/"$sample"/"$sample"_highQ_variants_no_indels_concat.fasta
 
 ```
 
 Tree is compiled using RAxML: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 raxmlHPC -T "$SLURM_CPUS_PER_TASK" -x 1522 -f a -m GTRCAT -p 1522 -# 10 -s /lustre04/scratch/acuenod/household/01_data/11_tree/output/all_concat_highQ_variants_no_indels_concat.fasta -w /lustre04/scratch/acuenod/household/01_data/11_tree/output/raxml/ -n raxmltree_all -V AVX2
 
 ```
@@ -288,7 +289,7 @@ raxmlHPC -T "$SLURM_CPUS_PER_TASK" -x 1522 -f a -m GTRCAT -p 1522 -# 10 -s /lust
 To have a solid way to call lineages within pandemic Vc strains, I chose one reference strain per lineage (see 'lineage_assignmnet.R'), downloaded the reads and assembled these (as usual). 
 I then calculated fastANI of my strains to all of these. Unfortunately, this was not unambiguous, as sometimes I see very high values to more than one reference strain. As this is based on the assembly, sequencing errors can play a role here. To circumvent this I now used medaka and filtered for high quality SNV of all my strains against the references using the following: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 ml apptainer
 ## define read directory
 read_dir=/lustre04/scratch/acuenod/household/01_data/00_reads/fastq
@@ -312,7 +313,7 @@ done
 
 To summarise these and count hq SNV I used the following: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 cd /home/acuenod/scratch/household/01_data/17_lineage_assignment/medaka/out
 grep -c -v '^\#' */*_medaka_hq_snv.vcf.recode.vcf > hq_snv_counts.txt
 ```
@@ -336,7 +337,7 @@ blastn -query "$query" -db  "$db" \
 
 --> use the overlav of 134Vc04 chr1 and 134Vc04 chr 2 as query to screen other the same sequence in other genomes using blastn:
 
-```{bash, echo=FALSE, eval=FALSE}
+```{bash, echo=TRUE, eval=FALSE}
 # load module
 ml StdEnv/2020 gcc/9.3.0 blast+/2.13.0
 
@@ -366,7 +367,7 @@ I realised that when checking how many reads span a region (the HR region on the
 
 
 For the junctions (chr1-HS1-chr2 or chr2-HS1-chr1, for the two junctions) I can the following: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 #load apptainer module 
 ml  StdEnv/2020 samtools/1.17
 
@@ -400,7 +401,7 @@ samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP | awk 'substr($0,
 ```
 
 and for the HS1 on the chromosome (chr1 OR chr2) the following: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 #load apptainer module 
 ml  StdEnv/2020 samtools/1.17
 
@@ -437,7 +438,7 @@ samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP |awk 'substr($0,1
 
 using the file ID I extracted and converted the respective reads to fasta files.
 for the junctions: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 
 input_fastq=/home/acuenod/scratch/household/01_data/00_reads/fastq/"$sample".fastq.gz
 # define variables for junction1
@@ -465,7 +466,7 @@ rm "$read_id_junction2"
 ```
 
 For the HR region on the chromosome: 
-```{bash. echo=F, eval=F}
+```{bash, echo=T, eval=F}
 #load apptainer module 
 ml  StdEnv/2020 samtools/1.17
 
@@ -499,7 +500,7 @@ samtools view "$input" --min-MQ 1 -F 256 -h --remove-flags DUP | awk 'substr($0,
 
 To check if these are genuin read or of these might be hybrid reads (then thy would have an adapter sequence where merged), I blasted the adapter sequences agains these fastas: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 
 db_dir=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/spanning_junction_adapter/fasta_from_reads/
 query_dir=/home/acuenod/scratch/household/01_data/13_minimap_alignmnets/spanning_junction_adapter/adapters/
@@ -526,7 +527,7 @@ done
 Eval in 'eval_read_count_HR.R'. I export all read ID in which an adapter was found at least 1 time. 
 I then remove the read ID of reads with adapter and count again: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 #for the non-fused HR
 cd /home/acuenod/scratch/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused
 
@@ -573,7 +574,7 @@ these. --> get location of islands and extract these.
 
 I blasted these flanking sides against all. For one genome (114Vc01) I created bed files of the pathogenicity island location (between flaking sides) and extracted them using the following: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 ml bedtools/2.29.2
 input_fasta=/home/acuenod/scratch/household/01_data/01_assemblies/114Vc01.fasta
 
@@ -604,7 +605,7 @@ I could then use the outputs to screen these in all genomes using blastn.
 ### Assembly and QC
 Reads are assembled using Spades via Unicycler and Quality controlled via Quast, screened for contamination using Metaphlan and annotated via bakta:
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 
 # This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
 
@@ -743,7 +744,7 @@ sed 's/,/;/' quality.tab | sed 's/\t/,/g' > quality.csv
 I used panaroo to compile the core genome alignment from which a tree was created using fastree. 
 panaroo: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 input_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/gff3
 output_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/24-02_panaroo_out/
 
@@ -752,7 +753,7 @@ panaroo -i "$input_dir"/*.gff3 -o "$output_dir" --clean-mode moderate --remove-i
 ```
 
 snp-sites and fasttree: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 ml StdEnv/2020 snp-sites/2.5.1
 snp-sites -c  /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/panaroo_out/core_gene_alignment_filtered.aln > /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/panaroo_out/core_gene_alignment_filtered-snp-sites.aln
 
@@ -768,7 +769,7 @@ FastTree -gtr -nt /lustre04/scratch/acuenod/household/01_data/16_public_seqs/hig
 ### Lineage assignment
 Is 7PET to determine whether a genome belongs to the 7PET sublineage: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 # load ariva venv
 source /home/acuenod/software/venvs/ariba/bin/activate
 # load modules (dependencies for ariba)
@@ -786,7 +787,7 @@ ml mash/2.3
 
 To identify to which 7PET sublineage the genomes are closest to, I used snippy. I assigned the lineage of the reference for which the lowest number of SNV were identified: 
 
-```{bash, echo=F, eval=F, echo=F, eval=F}
+```{bash, echo=T, eval=F, echo=T, eval=F}
 threads=16
 
 # define the variable 'sample_id'from the 'array' defined above
@@ -829,7 +830,7 @@ sed -i '1i \ variant\tsample\treference' all_snps_1.txt
 ### Screening homologous sequences (HS1)
 I used the following to screen HS1 and VPI-I in all public shoort read sequences
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 db=/home/acuenod/scratch/household/01_data/16_public_seqs/highQ_short_read_datasets/blast/input/db/public_Vc_db
 query=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/blast/input/query/Vc_over_10000_chr_overlap_1.fasta
 out=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/blast/output/blastout_HR_2_all_shortread_public.tab
@@ -843,7 +844,7 @@ blastn -query "$query" -db  "$db" \
 from these blastoutputs, I created bed files using 'blast_out_to_bed_HR_public.R'.
 I then calculated the read depths in these (using the bamfiles previously created) with:
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 #load apptainer module 
 module load bwa/0.7.17
 module load samtools/1.17
@@ -886,7 +887,7 @@ done
 
 
 and summarised these using the following: 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 cd /lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/readmapping/calc_read_depth/
 # add filename to al as column
 for file in $(ls *_average_coverage_both.tab)
@@ -908,7 +909,7 @@ rm *_average_coverage_both2.tab
 ### QC
 I QCed the assembled long read Vibrionales spp. using the following: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 # This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
 
 # set directory where environments are installed to, eg nanostats
@@ -1002,7 +1003,7 @@ sed 's/,/;/' 02_quality/quality.tab | sed 's/\t/,/g' > 02_quality/quality.csv
 ### species classification
 I used GTDB-tk for species assignment
 
-```{bash, echo=F, eval=D}
+```{bash, echo=T, eval=F}
 
 
 # load modules
@@ -1012,7 +1013,6 @@ ml pplacer/1.1.alpha19
 ml fastani/1.32
 ml fasttree/2.1.11
 ml mash/2.3
-ml python/3.10
 
 source /home/acuenod/software/venvs/GTDB-Tk/bin/activate
 
@@ -1024,7 +1024,7 @@ gtdbtk classify_wf --cpus 8 --skip_ani_screen --extension fasta --genome_dir /ho
  
 And kraken/bracken to screen for contamintations (I used this on the assemblies and not on the reads, which is probably not ideal)
 
-```{bash}
+```{bash, echo=T, eval=F}
 # kraken
 db=/lustre03/project/6033517/acuenod/household_current/kraken_db/lustre04/scratch/acuenod/kraken2_db
 assembly_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/assemblies/fasta_added
@@ -1057,7 +1057,7 @@ I identified assemblies with two large contigs (corresoponding to two chromosome
 I will next blast chr.2 agains chr.1 for each sample. 
 Therefore, I extracted all chr.1 and chr.2 names in 'public_long_reads.R' and extracted these from the assemblies using the following (in an interactive job)
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 ml nixpkgs/16.09  gcc/7.3.0 seqtk/1.3
 
 assembly_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/long_reads/assemblies/fasta
@@ -1077,7 +1077,7 @@ done
 
 For the actual blast: 
 
-```{bash, echo=F, eval=F}
+```{bash, echo=T, eval=F}
 ml StdEnv/2020 gcc/9.3.0 blast+/2.13.0
 
 chr1_dir=/home/acuenod/scratch/household/01_data/16_public_seqs/long_reads/blast_chr/chr1
