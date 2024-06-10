@@ -15,7 +15,7 @@ setwd('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents
 source('../transitionsfinder.R') # this was downloaded from GitHUb (https://github.com/Saannah/QuidiPhydy)
 
 # import basic metadata 
-meta_basic <- read.csv2("input_data/very_basic_meta_.csv", sep = ',')
+meta_basic <- read.csv2("input_data/very_basic_meta_1.csv", sep = ',')
 
 # plot the tree similarly as for Fig 2C
 # import the tree

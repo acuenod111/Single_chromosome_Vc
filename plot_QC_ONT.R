@@ -90,7 +90,7 @@ dev.off()
 
 
 # import basic metadata
-meta_basic <- read.csv2("input_data/very_basic_meta_.csv", sep = ',')
+meta_basic <- read.csv2("input_data/very_basic_meta_1.csv", sep = ',')
 
 # merge to QC
 QC['Individual'] <- gsub('Vc.*', '', QC$Sample)

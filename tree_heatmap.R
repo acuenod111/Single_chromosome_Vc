@@ -12,7 +12,7 @@ library('colorspace')
 setwd('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/02_scripts/check/')
 
 # import basic metadata 
-meta_basic <- read.csv2("input_data/very_basic_meta_.csv", sep = ',')
+meta_basic <- read.csv2("input_data/very_basic_meta_1.csv", sep = ',')
 
 # import the phylogenetic tree (RaxML SNP tree)
 tree <- read.tree("input_data/RAxML_bestTree.raxmltree_all_ref_N16961")
