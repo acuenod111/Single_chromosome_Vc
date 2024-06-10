@@ -16,6 +16,10 @@ colnames(overlap) <-  c('qseqid', 'sseqid', 'bitscore', 'pident', 'nident', 'mis
 # only consider hits when > 95% of the query was found
 overlap <- overlap[overlap$length >= overlap$qlen*0.95,]
 overlap['Sample'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})','\\1',overlap$sseqid)
+# add orientation
+overlap['orientation'] <- ifelse(overlap$sstart < overlap$send, 'F', 'R')
+table(overlap$orientation)
+
 # count the number of overlaps
 overlap_sum <- overlap %>% group_by(Sample) %>% summarise(n_HR=n(), 
                                                           on_x_chr = length(unique(sseqid)))
@@ -30,6 +34,38 @@ for (i in overlap$Sample){
   colnames(subset) <- c("seqid","start","end","strand")
   write.table(subset, paste0('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/01_data/16_check_singular_contig/HS1_tab/', i, '.tab'), row.names = F, quote = F, sep = '\t')
 }
+
+### check par genes
+## In the bakta annotation, only chr1 includes genes labelled as par. 
+# I found parA / parB / parA2 and parB2 on Uniprot and screened these in our genome using tblastn. Import results
+path <- 'input_data/par_genes/'
+files <- list.files(path = path, pattern = '\\_aa.tab')
+temp <- lapply(paste0(path, files), fread, sep="\t")
+
+blastout_par_aa <- do.call(rbind, lapply(paste0(path, files), function(x) 
+  transform(fread(x), query = gsub('.tab','',basename(x)))))
+colnames(blastout_par_aa) <-  c('qseqid', 'sseqid', 'bitscore', 'pident', 'nident', 'mismatch', 'length', 'qcovs', 'qlen', 'qstart', 'qend', 'slen', 'sstart', 'send', 'sseq','query')
+# only use matches > 95 pident and qcov
+blastout_par_aa <- as.data.frame(blastout_par_aa)
+blastout_par_aa <- blastout_par_aa[blastout_par_aa$pident >= 95,]
+range(blastout_par_aa$qcovs)
+# checl if each par gene was found once per genome
+blastout_par_aa['Sample'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\1', blastout_par_aa$sseqid)
+blastout_par_aa <- blastout_par_aa %>% group_by(Sample, query) %>% mutate(n = n())
+table(blastout_par_aa$n)
+table(blastout_par_aa$query) #--> all found once per genome
+#check if parAB2 were always found on chr2 and parAB always on chr1
+blastout_par_aa['chr'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\2', blastout_par_aa$sseqid)
+table(blastout_par_aa$query, blastout_par_aa$chr) # yes, this is true!
+range(blastout_par_aa[blastout_par_aa$query == 'parA2_aa' & blastout_par_aa$chr == '1',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parB2_aa' & blastout_par_aa$chr == '1',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parA2_aa' & blastout_par_aa$chr == '2',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parB2_aa' & blastout_par_aa$chr == '2',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parA_aa' & blastout_par_aa$chr == '1',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parB_aa' & blastout_par_aa$chr == '1',]$slen)
+# --> parAB occure only on chr1, parAB2 occur only on chr2, on fused chromosomes all 4 are present
+# check if there are mutattions between the fused and the non-fused ones
+seqs_par <- as.data.frame(table(blastout_par_aa$query, blastout_par_aa$sseq))
 
 # # # plot HS1 annotation (annotated by bakta)
 # plot gene content on 12kb HR seq
