@@ -885,6 +885,54 @@ bedtools getfasta -fi &quot;$input_fasta&quot; -bed &quot;$input_bed&quot; -fo &
 <p>I could then use the outputs to screen these in all genomes using
 blastn.</p>
 </div>
+<div id="dam-sequence-comparison" class="section level2">
+<h2>dam sequence comparison</h2>
+<div id="section" class="section level3">
+<h3>2024-05-29</h3>
+<p>This also matches the reference Uniprot reference:
+&gt;sp|A5F520|DMA_VIBC3 DNA adenine methylase OS=Vibrio cholerae
+serotype O1 (strain ATCC 39541 / Classical Ogawa 395 / O395) OX=345073
+GN=dam PE=3 SV=1
+MKKQRAFLKWAGGKYSLVEDIQRHLPEARELVEPFVGAGSVFLNTDFERYLLADINPDLI
+NFYNLLKTEPQAYIHEAKRWFVPENNRKEVYLDIRKQFNQSDDAMFRSLAFLYMNRFGFN
+GLCRYNKKGGFNVPFGSYKKPYFPEQELEFFAEKAQRATFICASYGETFARAQSDSVIYC
+DPPYAPLSTTANFTSYAGNGFTLDDQAALADIAEKTAKERGISVLISNHDTTHTRRLYRG
+AQLNVVKANRTISRNGAGRNKVDELLALFTPHLSSQA</p>
+</div>
+<div id="section-1" class="section level3">
+<h3>2023-12-11</h3>
+<p>It has been shown in the lab, that when dam is mutated (needed for
+chr. 2 replication), chr 2 fuses with chr. 1 to survive (<a href="https://onlinelibrary.wiley.com/doi/epdf/10.1111/mmi.12483" class="uri">https://onlinelibrary.wiley.com/doi/epdf/10.1111/mmi.12483</a>).
+Therefore, check the dam sequences. I see from the bakta tsv file, that
+‘dam’ genes are called ‘DNA adenine methylase’. extract the protein
+sequences using seqkit:</p>
+<pre class="bash"><code>ml StdEnv/2023 seqkit/2.5.1
+seqkit grep -nrf dam_id_grep.txt faa/*faa &gt; dam_aa_seq.faa # where dam_id_grep.txt contains one line &#39;DNA adenine methylase&#39;
+</code></pre>
+<p>evaluated in ‘eval_read_count_HR.R’ –&gt; all 467 have the exact same
+dam aa sequence.</p>
+</div>
+<div id="par-genes" class="section level3">
+<h3>par genes</h3>
+</div>
+<div id="section-2" class="section level3">
+<h3>2024-06-05</h3>
+<p>par genes play a role in partitioning the chromosomes to each cell
+after replication <a href="https://pubmed.ncbi.nlm.nih.gov/17197419/" class="uri">https://pubmed.ncbi.nlm.nih.gov/17197419/</a> when they are
+depleted, chr2 is lost. I therefore want to check of these are lost in
+our fused chromosome. I first downloaded their sequences from NCBI
+(searching ((partitioning protein parB) AND vibrio cholerae[Organism]))
+in Genes and blast them in our genomes. These are each only found once
+per genome and only on chr1. (I therefore think that these are parAB1
+and that these are too far to also fetch parAB2). I check the annotation
+of par genes using ‘grep “partitioning protein Par” <em>/</em>tsv &gt;
+par_genes_annotated.tsv’, to try to find parAB1 (encoded on chr1) and
+parAB2 (encoded on chr2). none was annotated as parA1 / parB2. I found
+the proteins sequences for these and from parA and parB on Uniprot /
+NCBI and used tblastn to screen these in my genomes using tblastn:</p>
+<p>Then evaluate output in ‘eval_real_count_HR.R’.</p>
+</div>
+</div>
 </div>
 <div id="analysis-of-publicly-available-sequence-data" class="section level1">
 <h1>Analysis of publicly available sequence data</h1>
