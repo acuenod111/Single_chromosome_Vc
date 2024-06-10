@@ -599,6 +599,58 @@ bedtools getfasta -fi "$input_fasta" -bed "$input_bed" -fo "$output" -s
 
 I could then use the outputs to screen these in all genomes using blastn. 
 
+## dam sequence comparison
+
+### 2024-05-29
+This also matches the reference Uniprot reference: 
+>sp|A5F520|DMA_VIBC3 DNA adenine methylase OS=Vibrio cholerae serotype O1 (strain ATCC 39541 / Classical Ogawa 395 / O395) OX=345073 GN=dam PE=3 SV=1
+MKKQRAFLKWAGGKYSLVEDIQRHLPEARELVEPFVGAGSVFLNTDFERYLLADINPDLI
+NFYNLLKTEPQAYIHEAKRWFVPENNRKEVYLDIRKQFNQSDDAMFRSLAFLYMNRFGFN
+GLCRYNKKGGFNVPFGSYKKPYFPEQELEFFAEKAQRATFICASYGETFARAQSDSVIYC
+DPPYAPLSTTANFTSYAGNGFTLDDQAALADIAEKTAKERGISVLISNHDTTHTRRLYRG
+AQLNVVKANRTISRNGAGRNKVDELLALFTPHLSSQA
+
+### 2023-12-11
+It has been shown in the lab, that when dam is mutated (needed for chr. 2 replication), chr 2 fuses with chr. 1 to survive (https://onlinelibrary.wiley.com/doi/epdf/10.1111/mmi.12483). 
+Therefore, check the dam sequences. I see from the bakta tsv file, that 'dam' genes are called 'DNA adenine methylase'. extract the protein sequences using seqkit: 
+
+```{bash, echo=TRUE, eval=FALSE}
+ml StdEnv/2023 seqkit/2.5.1
+seqkit grep -nrf dam_id_grep.txt faa/*faa > dam_aa_seq.faa # where dam_id_grep.txt contains one line 'DNA adenine methylase'
+
+```
+evaluated in 'eval_read_count_HR.R' --> all 467 have the exact same dam aa sequence. 
+
+
+### par genes
+### 2024-06-05
+par genes play a role in partitioning the chromosomes to each cell after replication https://pubmed.ncbi.nlm.nih.gov/17197419/
+when they are depleted, chr2 is lost. 
+I therefore want to check of these are lost in our fused chromosome. 
+I first downloaded their sequences from NCBI (searching ((partitioning protein parB) AND vibrio cholerae[Organism])) in Genes and blast them in our genomes. These are each only found once per genome and only on chr1. (I therefore think that these are parAB1 and that these are too far to also fetch parAB2). 
+I check the annotation of par genes using 'grep "partitioning protein Par" */*tsv > par_genes_annotated.tsv', to try to find parAB1 (encoded on chr1) and parAB2 (encoded on chr2). none was annotated as parA1 / parB2. I found the proteins sequences for these and from parA and parB on Uniprot / NCBI and used tblastn to screen these in my genomes using tblastn:
+
+```{bash, echo=F, eval=F}
+
+db=/lustre04/scratch/acuenod/household/01_data/05_blast/db/householddb
+query_dir=/home/acuenod/scratch/household/01_data/05_blast/seqs_to_query/par_genes/aa
+out_dir=/lustre04/scratch/acuenod/household/01_data/05_blast/output/
+
+for file in $(ls "$query_dir")
+do
+  query_name_temp="${file/%.fasta/}"
+  query_name_temp="${query_name_temp/*\//}"
+  query_name="$query_name_temp"
+  #echo "${file}"
+  echo "${query_name}"
+  tblastn -query "$query_dir"/"${file}" -db  "$db" \
+    -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send sseq' \
+    -max_target_seqs 5000 -out "$out_dir"/"${query_name}".tab
+done
+
+```
+
+Then evaluate output in 'eval_real_count_HR.R'. 
 
 # Analysis of publicly available sequence data
 ## Short reads
@@ -607,7 +659,7 @@ Reads are assembled using Spades via Unicycler and Quality controlled via Quast,
 
 ```{bash, echo=T, eval=F}
 
-# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich from the Applied Microbiology Research group at the University Hospital of Basel
 
 # set directory where the metaphlan database is copied to (ther database has to live in scratch and can be copied from '/lustre03/project/6077363/GROUP/01_db/metaphlan_databases.tar.gz' and needs to be tar unzipped before usage)
 metaphlan_db_dir=/scratch/acuenod/metaphlan_databases/
@@ -910,7 +962,7 @@ rm *_average_coverage_both2.tab
 I QCed the assembled long read Vibrionales spp. using the following: 
 
 ```{bash, echo=T, eval=F}
-# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich from the Applied Microbiology Research group at the University Hospital of Basel
 
 # set directory where environments are installed to, eg nanostats
 venv_dir=/home/acuenod/software/venvs/
