@@ -19,8 +19,8 @@ QC <- merge(QC, samples, by.x = 'Sample', by.y = 'V1', all = T)
 # some reads were sub-sampled and then assembled again, the sample list only includes the subsampled results, so does the QC file
 
 # import species ID by GTDB-tk
-gtdb <- read.table('input_data/public/long_reads/gtdbtk.bac120.summary.tsv', sep='\t', fill = TRUE, header = T, row.names = NULL)
-gtdb_added <- read.table('input_data/public/long_reads/gtdbtk.bac120.summary_added.tsv', sep='\t', fill = TRUE, header = T, row.names = NULL)
+gtdb <- read.table('input_data/public/long_reads/gtdbtk.bac120.summary_b.tsv', sep='\t', fill = TRUE, header = T, row.names = NULL)
+gtdb_added <- read.table('input_data/public/long_reads/gtdbtk.bac120.summary_added_b.tsv', sep='\t', fill = TRUE, header = T, row.names = NULL)
 gtdb <- merge(gtdb, gtdb_added, by = colnames(gtdb_added), all = T)
 gtdb['species_classification'] <- gsub('.*s\\_{2}', '', gtdb$classification)
 # Aliivibrio and Photobacterium are genera of the Vibrionales family
@@ -30,8 +30,8 @@ setdiff(gtdb$user_genome, QC$Sample)
 QC <- merge(QC, gtdb[,c('user_genome', 'species_classification')], by.x = 'Sample', by.y = 'user_genome')
 
 # import kraken2/bracken outputs
-bracken <-  read.table('input_data/public/long_reads/bracken_public_long_reads.tab', sep='\t', fill = TRUE, header = T, row.names = NULL)
-bracken_added <-  read.table('input_data/public/long_reads/bracken_public_long_reads_added.tab', sep='\t', fill = TRUE, header = F, row.names = NULL)
+bracken <-  read.table('input_data/public/long_reads/bracken_public_long_reads_b.tab', sep='\t', fill = TRUE, header = T, row.names = NULL)
+bracken_added <-  read.table('input_data/public/long_reads/bracken_public_long_reads_added_b.tab', sep='\t', fill = TRUE, header = F, row.names = NULL)
 colnames(bracken_added) <- colnames(bracken)
 bracken <- merge(bracken, bracken_added, by = colnames(bracken), all = T)
 bracken['Sample'] <- gsub('.bracken', '', bracken$filename)
@@ -112,8 +112,8 @@ species_breakdown_longread
 dev.off()
 
 # read assembly stats 
-assembly_info <- read.table('input_data/public/long_reads/assembly_info_all.txt')
-assembly_info_added <- read.table('input_data/public/long_reads/assembly_info_repeat.txt')
+assembly_info <- read.table('input_data/public/long_reads/assembly_info_all_b.txt')
+assembly_info_added <- read.table('input_data/public/long_reads/assembly_info_repeat_b.txt')
 assembly_info <- merge(assembly_info, assembly_info_added, by = colnames(assembly_info_added), all=T)
 colnames(assembly_info) <- c('seq_name','length','cov.','circ.','repeat','mult.','alt_group','graph_path','readfile_name')
 assembly_info['sample'] <- gsub('((_1)|(A|B))*.fastq', '', assembly_info$readfile_name)
@@ -262,7 +262,7 @@ blastout_q <- merge(blastout_q, QC_1[,c("Sample", "species_classification")], by
 # only keep species which for which more than 2 genomes were available
 blastout_q <- blastout_q[blastout_q$species_classification %in% names(table(QC_1$species_classification)[table(QC_1$species_classification) >2]),]
 
-# summarise the number of blasthits per sample, their mean and total length (is total oberlap between chr 1 and chr2)
+# summarise the number of blasthits per sample, their mean and total length (is total overlap between chr1 and chr2)
 blastout_q_unique <- blastout_q %>% group_by(qseqid, species_classification) %>% summarise(n_matches = n(), 
                                                                  mean_length = mean(length), 
                                                                  total_length = sum(length))
@@ -391,10 +391,14 @@ ggplot(blastout_12kbHR, aes(x=pident)) +
 ggplot(blastout_12kbHR, aes(x=qcovs)) +
   geom_histogram()
 # use 95 and 95 as threshold for pident and qcovs
-blastout_12kbHR_Sel <- blastout_12kbHR[blastout_12kbHR$pident >=95 & (blastout_12kbHR$length >= blastout_12kbHR$qlen*0.95),]
+blastout_12kbHR_Sel <- blastout_12kbHR[blastout_12kbHR$pident >=95 & (blastout_12kbHR$length >= blastout_12kbHR$qlen*0.90),]
 # count per assembly
 blastout_12kbHR_Sel['sample'] <- gsub('_contig_.*', '', blastout_12kbHR_Sel$sseqid)
 blastout_12kbHR_Sel_sum <- blastout_12kbHR_Sel %>% group_by(sample) %>% summarise(n_hits = n(), n_sseqs = n_distinct(sseqid), sseq_lengths = paste0(unique(slen), collapse = '_'))
 
 # check how many HS1 are present in the public assemblies which assembled to one chromosome 
-blastout_12kbHR_Sel_sum[blastout_12kbHR_Sel_sum$sample %in% c("ERR9364039","ERR9364050","SRR10208201"),] # --> they all carry 3
+blastout_12kbHR_Sel_sum[blastout_12kbHR_Sel_sum$sample %in% c("ERR9364039","ERR9364050","SRR10208201"),] # --> they all carry 2
+
+# check if orientation of HS1 is always the same
+blastout_12kbHR_Sel['HS1_orientation'] <- ifelse(blastout_12kbHR_Sel$sstart < blastout_12kbHR_Sel$send, 'F', 'R')
+blastout_12kbHR_Sel[blastout_12kbHR_Sel$sample %in% c("ERR9364039","ERR9364050","SRR10208201"),]
