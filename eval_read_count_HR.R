@@ -5,6 +5,7 @@ library('seqinr')
 library('data.table')
 library('gggenes')
 library('RColorBrewer')
+library("Biostrings")
 
 setwd('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/02_scripts/check/')
 
@@ -168,4 +169,12 @@ p <- ggplot(read_counts, aes(x=region, y=read_counts_norm)) +
 pdf('output_figures/read_count_HR_regions_excl_adapter.pdf', height=5, width=2.7)
 p
 dev.off()
+
+# # # Compare sequences of the dam gene
+dam_aa <- readAAStringSet('input_data/dam_aa_seq.faa')
+seq_name = names(dam_aa)
+sequence = paste(dam_aa)
+dam_df <- data.frame(seq_name, sequence) # all have the same unique dam aa sequence
+length(unique(dam_df$sequence)) # all have the same unique dam aa sequence
+
 
