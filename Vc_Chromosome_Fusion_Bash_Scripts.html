@@ -469,7 +469,7 @@ the assemblies use Nanostats and Quast - remap all reads to the
 generated assembly. Use the resulting bam file to calculate the overall
 read depth - summarise all to one table</p>
 <pre class="bash"><code>
-# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich in the research group of Prof. Adrian Egli (aegli@imm.uzh.ch) 
 
 # assign reads to new variable
 R=00_reads/fastq/&quot;$sample_id&quot;.fastq.gz
@@ -912,9 +912,37 @@ seqkit grep -nrf dam_id_grep.txt faa/*faa &gt; dam_aa_seq.faa # where dam_id_gre
 <p>evaluated in ‘eval_read_count_HR.R’ –&gt; all 467 have the exact same
 dam aa sequence.</p>
 </div>
-<div id="par-genes" class="section level3">
-<h3>par genes</h3>
 </div>
+<div id="compare-oric-and-ctrs" class="section level2">
+<h2>compare oriC and ctrS</h2>
+<p>In this paper(<a href="https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2018.02932/full" class="uri">https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2018.02932/full</a>)
+they describe two naturally fused V. cholerae strains, in which either
+both origins of replication are active, or only one, depending on the
+location crtS. Therefore, check the copy number variation of crtS.</p>
+<p>To check whether both oris were found in the fused chromosomes:</p>
+<pre class="bash"><code>grep &quot;oriC&quot; */*.tsv &gt; oriC.tsv</code></pre>
+<p>To find crtS in my genomes I use the crtS sequence described by Bruhn
+et al. (see ref above) for NSCV1</p>
+<blockquote>
+<p>crtS_NSCV1
+AAAATTGAAATGCAGAATATGTAACTTATGCTTTCGGTGGGTGGTTATATAAAAGTTCTTTTCATGGCAGATCGCTGATCAA</p>
+</blockquote>
+<p>and blastn to screen this in all genomes:</p>
+<pre class="bash"><code># load module
+ml StdEnv/2020 gcc/9.3.0 blast+/2.13.0
+
+db=/lustre04/scratch/acuenod/household/01_data/05_blast/db/householddb
+query=/lustre04/scratch/acuenod/household/01_data/05_blast/seqs_to_query/crtS_site.fasta
+out=/lustre04/scratch/acuenod/household/01_data/05_blast/output/blastout_crtS_site_household_genomes.tab
+
+blastn -task blastn-short -query &quot;$query&quot; -db  &quot;$db&quot; \
+  -outfmt &#39;6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send&#39; \
+  -max_target_seqs 5000 -out &quot;$out&quot;
+</code></pre>
+<p>Then evaluate both in ‘eval_read_count_HR.R’</p>
+</div>
+<div id="par-genes" class="section level2">
+<h2>par genes</h2>
 <div id="section-2" class="section level3">
 <h3>2024-06-05</h3>
 <p>par genes play a role in partitioning the chromosomes to each cell
@@ -944,7 +972,7 @@ NCBI and used tblastn to screen these in my genomes using tblastn:</p>
 via Quast, screened for contamination using Metaphlan and annotated via
 bakta:</p>
 <pre class="bash"><code>
-# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich from the Applied Microbiology Research group at the University Hospital of Basel
 
 # set directory where the metaphlan database is copied to (ther database has to live in scratch and can be copied from &#39;/lustre03/project/6077363/GROUP/01_db/metaphlan_databases.tar.gz&#39; and needs to be tar unzipped before usage)
 metaphlan_db_dir=/scratch/acuenod/metaphlan_databases/
@@ -1225,7 +1253,7 @@ rm *_average_coverage_both2.tab
 <h3>QC</h3>
 <p>I QCed the assembled long read Vibrionales spp. using the
 following:</p>
-<pre class="bash"><code># This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+<pre class="bash"><code># This script has been adapted from a script originally written by Dr. Daniel Wüthrich in the research group of Prof. Adrian Egli (aegli@imm.uzh.ch) 
 
 # set directory where environments are installed to, eg nanostats
 venv_dir=/home/acuenod/software/venvs/
