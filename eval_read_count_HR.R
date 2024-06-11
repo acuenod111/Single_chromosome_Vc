@@ -28,45 +28,14 @@ table(overlap_sum$n_HR, overlap_sum$on_x_chr)
 write.table(overlap_sum, 'input_data/blastout_HR_all_sum.tab', quote = F, row.names = F)
 
 # export the HS1 location for each genome
-for (i in overlap$Sample){
-  subset <- NULL
-  subset <- overlap[overlap$Sample == i, c("sseqid", "sstart", 'send')]
-  subset['strand'] <- '+'
-  colnames(subset) <- c("seqid","start","end","strand")
-  write.table(subset, paste0('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/01_data/16_check_singular_contig/HS1_tab/', i, '.tab'), row.names = F, quote = F, sep = '\t')
-}
+#for (i in overlap$Sample){
+#  subset <- NULL
+#  subset <- overlap[overlap$Sample == i, c("sseqid", "sstart", 'send')]
+#  subset['strand'] <- '+'
+#  colnames(subset) <- c("seqid","start","end","strand")
+#  write.table(subset, paste0('./16_check_singular_contig/HS1_tab/', i, '.tab'), row.names = F, quote = F, sep = '\t')
+#}
 
-### check par genes
-## In the bakta annotation, only chr1 includes genes labelled as par. 
-# I found parA / parB / parA2 and parB2 on Uniprot and screened these in our genome using tblastn. Import results
-path <- 'input_data/par_genes/'
-files <- list.files(path = path, pattern = '\\_aa.tab')
-temp <- lapply(paste0(path, files), fread, sep="\t")
-
-blastout_par_aa <- do.call(rbind, lapply(paste0(path, files), function(x) 
-  transform(fread(x), query = gsub('.tab','',basename(x)))))
-colnames(blastout_par_aa) <-  c('qseqid', 'sseqid', 'bitscore', 'pident', 'nident', 'mismatch', 'length', 'qcovs', 'qlen', 'qstart', 'qend', 'slen', 'sstart', 'send', 'sseq','query')
-# only use matches > 95 pident and qcov
-blastout_par_aa <- as.data.frame(blastout_par_aa)
-blastout_par_aa <- blastout_par_aa[blastout_par_aa$pident >= 95,]
-range(blastout_par_aa$qcovs)
-# checl if each par gene was found once per genome
-blastout_par_aa['Sample'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\1', blastout_par_aa$sseqid)
-blastout_par_aa <- blastout_par_aa %>% group_by(Sample, query) %>% mutate(n = n())
-table(blastout_par_aa$n)
-table(blastout_par_aa$query) #--> all found once per genome
-#check if parAB2 were always found on chr2 and parAB always on chr1
-blastout_par_aa['chr'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\2', blastout_par_aa$sseqid)
-table(blastout_par_aa$query, blastout_par_aa$chr) # yes, this is true!
-range(blastout_par_aa[blastout_par_aa$query == 'parA2_aa' & blastout_par_aa$chr == '1',]$slen)
-range(blastout_par_aa[blastout_par_aa$query == 'parB2_aa' & blastout_par_aa$chr == '1',]$slen)
-range(blastout_par_aa[blastout_par_aa$query == 'parA2_aa' & blastout_par_aa$chr == '2',]$slen)
-range(blastout_par_aa[blastout_par_aa$query == 'parB2_aa' & blastout_par_aa$chr == '2',]$slen)
-range(blastout_par_aa[blastout_par_aa$query == 'parA_aa' & blastout_par_aa$chr == '1',]$slen)
-range(blastout_par_aa[blastout_par_aa$query == 'parB_aa' & blastout_par_aa$chr == '1',]$slen)
-# --> parAB occure only on chr1, parAB2 occur only on chr2, on fused chromosomes all 4 are present
-# check if there are mutattions between the fused and the non-fused ones
-seqs_par <- as.data.frame(table(blastout_par_aa$query, blastout_par_aa$sseq))
 
 # # # plot HS1 annotation (annotated by bakta)
 # plot gene content on 12kb HR seq
@@ -176,5 +145,76 @@ seq_name = names(dam_aa)
 sequence = paste(dam_aa)
 dam_df <- data.frame(seq_name, sequence) # all have the same unique dam aa sequence
 length(unique(dam_df$sequence)) # all have the same unique dam aa sequence
+
+
+# # # check par genes
+# In the bakta annotation, only chr1 includes genes labelled as par. 
+# I found parA / parB / parA2 and parB2 on Uniprot and screened these in our genome using tblastn. Import results
+path <- 'input_data/par_genes/'
+files <- list.files(path = path, pattern = '\\_aa.tab')
+temp <- lapply(paste0(path, files), fread, sep="\t")
+
+blastout_par_aa <- do.call(rbind, lapply(paste0(path, files), function(x) 
+  transform(fread(x), query = gsub('.tab','',basename(x)))))
+colnames(blastout_par_aa) <-  c('qseqid', 'sseqid', 'bitscore', 'pident', 'nident', 'mismatch', 'length', 'qcovs', 'qlen', 'qstart', 'qend', 'slen', 'sstart', 'send', 'sseq','query')
+# only use matches > 95 pident and qcov
+blastout_par_aa <- as.data.frame(blastout_par_aa)
+blastout_par_aa <- blastout_par_aa[blastout_par_aa$pident >= 95,]
+range(blastout_par_aa$qcovs)
+# checl if each par gene was found once per genome
+blastout_par_aa['Sample'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\1', blastout_par_aa$sseqid)
+blastout_par_aa <- blastout_par_aa %>% group_by(Sample, query) %>% mutate(n = n())
+table(blastout_par_aa$n)
+table(blastout_par_aa$query) #--> all found once per genome
+#check if parAB2 were always found on chr2 and parAB always on chr1
+blastout_par_aa['chr'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\2', blastout_par_aa$sseqid)
+table(blastout_par_aa$query, blastout_par_aa$chr) # yes, this is true!
+range(blastout_par_aa[blastout_par_aa$query == 'parA2_aa' & blastout_par_aa$chr == '1',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parB2_aa' & blastout_par_aa$chr == '1',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parA2_aa' & blastout_par_aa$chr == '2',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parB2_aa' & blastout_par_aa$chr == '2',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parA_aa' & blastout_par_aa$chr == '1',]$slen)
+range(blastout_par_aa[blastout_par_aa$query == 'parB_aa' & blastout_par_aa$chr == '1',]$slen)
+# --> parAB occure only on chr1, parAB2 occur only on chr2, on fused chromosomes all 4 are present
+# check if there are mutattions between the fused and the non-fused ones
+seqs_par <- as.data.frame(table(blastout_par_aa$query, blastout_par_aa$sseq))
+
+
+# # # evaluate oriC position in relation to crtS
+# in this paper https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2018.02932/full they describe that the location of ctrS can have an impact on whether both ori are active in naturally fused chromosome. Therefore, check the location of the oris and crtS
+# import oriC annotations
+oriC <- read.table('input_data/oriC.tsv', sep='\t')
+colnames(oriC) <- c('SequenceId','Type','Start','Stop','Strand','LocusTag','Gene','Product')
+oriC['Sample'] <- gsub('\\/.*', '', oriC$SequenceId)
+oriC['Chr'] <- gsub('(.*)(\\d{1}$)', '\\2', oriC$SequenceId)
+oriC <- oriC %>% 
+  mutate(n_ori_per_chr = n(), 
+         length_ori = Stop - Start) %>%
+  group_by(Sample) %>% 
+  mutate(n_ori_per_sample = n()) %>% # add how often found per sample and per chr
+  group_by(Sample, Chr) %>%
+  mutate(n_ori_per_chr = n()) 
+oriC['ori'] <- ifelse(oriC$length_ori < 500, 'ori1', 'ori2')
+
+all(table(oriC$ori, oriC$Sample) == 1) # each ori found once per sample
+table(oriC$ori,oriC$n_ori_per_chr) # ori1 and ori2 were each found on 409 chr, they were found together on 58 chr (thats the fused ones)
+
+oriC_fused <- oriC[oriC$n_ori_per_chr == 2, c('Type','Start','Stop','Product','Sample','Chr','n_ori_per_chr','length_ori','n_ori_per_sample','ori')]
+oriC_fused_w <- oriC_fused %>% pivot_wider(names_from = ori, values_from = c(Start, Stop, length_ori))
+
+# import crtS 
+blast_out_crtS <- read.table('input_data/blastout_crtS_site_household_genomes.tab')
+colnames(blast_out_crtS) <-  c('qseqid', 'sseqid', 'bitscore', 'pident', 'nident', 'mismatch', 'length', 'qcovs', 'qlen', 'qstart', 'qend', 'slen', 'sstart', 'send')
+table(blast_out_crtS$pident, blast_out_crtS$qcovs) #
+blast_out_crtS['Sample'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\1', blast_out_crtS$sseqid)
+blast_out_crtS['Chr'] <- gsub('(\\d{3}Vc\\d{2})(\\d{1})', '\\2', blast_out_crtS$sseqid)
+blast_out_crtS_fused <- blast_out_crtS[blast_out_crtS$slen > 3500000,c("Sample","Chr","slen","sstart","send")]
+colnames(blast_out_crtS_fused) <- c("Sample","Chr","Length_fused_Chr","Start_crtS", "Stop_crtS")
+
+# merge the two
+oriC_crtS_fused <- merge(oriC_fused_w, blast_out_crtS_fused, by.x = c('Sample','Chr'), by.y = c('Sample','Chr'), all = T)
+range(oriC_crtS_fused$Start_ori1)# at the end, but is the beginning
+range(oriC_crtS_fused$Start_ori2)
+range(oriC_crtS_fused$Start_crtS)
 
 
