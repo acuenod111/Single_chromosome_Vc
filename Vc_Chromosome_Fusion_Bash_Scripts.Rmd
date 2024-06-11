@@ -144,7 +144,7 @@ I used the following for quality control of the flye assemblies:
 
 ```{bash, echo=T, eval=F}
 
-# This script has been adapted from a script originally drafted by Dr. Daniel Wüthrich at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich in the research group of Prof. Adrian Egli (aegli@imm.uzh.ch) 
 
 # assign reads to new variable
 R=00_reads/fastq/"$sample_id".fastq.gz
@@ -622,7 +622,39 @@ seqkit grep -nrf dam_id_grep.txt faa/*faa > dam_aa_seq.faa # where dam_id_grep.t
 evaluated in 'eval_read_count_HR.R' --> all 467 have the exact same dam aa sequence. 
 
 
-### par genes
+## compare oriC and ctrS
+In this paper(https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2018.02932/full)  they describe two naturally fused V. cholerae  strains, in which either both origins of replication are active, or only one, depending on the location crtS.
+Therefore, check the copy number variation of crtS. 
+
+To check whether both oris were found in the fused chromosomes:  
+```{bash, echo=T, eval=F}
+grep "oriC" */*.tsv > oriC.tsv
+```
+
+To find crtS in my genomes I use the crtS sequence described by Bruhn et al. (see ref above) for NSCV1
+
+>crtS_NSCV1
+AAAATTGAAATGCAGAATATGTAACTTATGCTTTCGGTGGGTGGTTATATAAAAGTTCTTTTCATGGCAGATCGCTGATCAA
+
+and blastn to screen this in all genomes:
+
+```{bash, echo=T, eval=F}
+# load module
+ml StdEnv/2020 gcc/9.3.0 blast+/2.13.0
+
+db=/lustre04/scratch/acuenod/household/01_data/05_blast/db/householddb
+query=/lustre04/scratch/acuenod/household/01_data/05_blast/seqs_to_query/crtS_site.fasta
+out=/lustre04/scratch/acuenod/household/01_data/05_blast/output/blastout_crtS_site_household_genomes.tab
+
+blastn -task blastn-short -query "$query" -db  "$db" \
+  -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send' \
+  -max_target_seqs 5000 -out "$out"
+
+```
+
+Then evaluate both in 'eval_read_count_HR.R'
+
+## par genes
 ### 2024-06-05
 par genes play a role in partitioning the chromosomes to each cell after replication https://pubmed.ncbi.nlm.nih.gov/17197419/
 when they are depleted, chr2 is lost. 
@@ -962,7 +994,7 @@ rm *_average_coverage_both2.tab
 I QCed the assembled long read Vibrionales spp. using the following: 
 
 ```{bash, echo=T, eval=F}
-# This script has been adapted from a script originally written by Dr. Daniel Wüthrich from the Applied Microbiology Research group at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich in the research group of Prof. Adrian Egli (aegli@imm.uzh.ch) 
 
 # set directory where environments are installed to, eg nanostats
 venv_dir=/home/acuenod/software/venvs/
