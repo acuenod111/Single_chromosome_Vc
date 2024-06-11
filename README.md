@@ -3,7 +3,7 @@ This directory contains all scripts used for the analysis in "Long-read sequenci
 All input data to reproduce the figures and run the R scripts can be downloaded via the OpenScienceFoundation (https://osf.io/xyfvg/). 
 
 ## Abstract 
-Two circular chromosomes are a defining feature of the family Vibrionaceae, including the pathogen V. cholerae, with rare reports of isolates with a single, fused chromosome. Here we report chromosome fusions in clinical V. cholerae isolates, including several independent fusion events stable enough to be transmitted between patients within a household. Fusion occurs in a 12 kilobase pair homologous sequence (HS1) which is shared between the two chromosomes.
+Two circular chromosomes are a defining feature of the family Vibrionaceae, including the pathogen Vibrio cholerae, with rare reports of isolates with a single, fused chromosome. Here we report chromosome fusions in clinical V. cholerae O1 isolates, including several independent fusion events stable enough to be transmitted between patients within a household. Fusion occurs in a 12 kilobase-pair homologous sequence shared between the two chromosomes, which may lead to reversible chromosomal fusion.
 
 ## Overview
 ### Vc_Chromosome_Fusion_Bash_Scripts.Rmd
@@ -21,6 +21,7 @@ This script evaluates and plots the quality control data for the genomes sequenc
 ### eval_readcount_HR.R
 This script summarises how often the HS1 was found in each genome sequenced for this study (screened via blastn). 
 It plots the annotation of HS1 (Fig. 2B) and evaluates and plots the number of reads which span HS1 and are flanking different chr sequences excluding the ones where a sequencing adapter was found (Fig. S2). 
+Finally, this script evaluates the presence similarity of sequences which are known to play a role in chromosome replication, such as the par genes, the origins of replication (ori 1 and 2), the Chr2 replication triggering Site crtS, and the dam gene. 
 
 ### transitionfinder.R
 Performs ancestral state reconstruction and identifies fusion / fission events along the phylogenetic tree (Figure S3). 
