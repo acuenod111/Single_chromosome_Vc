@@ -216,5 +216,8 @@ oriC_crtS_fused <- merge(oriC_fused_w, blast_out_crtS_fused, by.x = c('Sample','
 range(oriC_crtS_fused$Start_ori1)# at the end, but is the beginning
 range(oriC_crtS_fused$Start_ori2)
 range(oriC_crtS_fused$Start_crtS)
+oriC_crtS_fused['dist_ori1_ori2'] <- abs(oriC_crtS_fused$Start_ori1 - oriC_crtS_fused$Start_ori2)
+oriC_crtS_fused['dist_ori1_crtS'] <- abs(oriC_crtS_fused$Start_ori1 - oriC_crtS_fused$Start_crtS)
+oriC_crtS_fused['which_first'] <- ifelse(oriC_crtS_fused$dist_ori1_ori2 < oriC_crtS_fused$dist_ori1_crtS, 'ori2 seen first', 'crtS seen first')
 
-
+table(oriC_crtS_fused['which_first'])
