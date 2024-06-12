@@ -402,3 +402,12 @@ blastout_12kbHR_Sel_sum[blastout_12kbHR_Sel_sum$sample %in% c("ERR9364039","ERR9
 # check if orientation of HS1 is always the same
 blastout_12kbHR_Sel['HS1_orientation'] <- ifelse(blastout_12kbHR_Sel$sstart < blastout_12kbHR_Sel$send, 'F', 'R')
 blastout_12kbHR_Sel[blastout_12kbHR_Sel$sample %in% c("ERR9364039","ERR9364050","SRR10208201"),]
+
+# not 100% if its valid to check for the orientation in this way. Check for the annotation of exeA (Type II secretory pathway ATPase component GspA/ExeA/MshM) which only occurs within HS1
+annotation_exeA <- read.table('input_data/check_HS1_exeA_public_fused.tsv', sep='\t')
+colnames(annotation_exeA) <- c('SequenceId','Type','Start','Stop','Strand','LocusTag','Gene','Product', 'DbXrefs')
+annotation_exeA['Sample'] <- gsub('\\/.*','',annotation_exeA$SequenceId)
+annotation_exeA['orientation'] <- ifelse(annotation_exeA$Start < annotation_exeA$Stop, 'F', 'R')
+table(annotation_exeA$orientation, annotation_exeA$Strand) # all look in the same direction
+table(annotation_exeA$Sample, annotation_exeA$Strand) # ERR9364039 and ERR9364050 both look in the same direction, in SRR10208201 they are oriented in different directions
+

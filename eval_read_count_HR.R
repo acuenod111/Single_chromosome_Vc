@@ -36,6 +36,13 @@ write.table(overlap_sum, 'input_data/blastout_HR_all_sum.tab', quote = F, row.na
 #  write.table(subset, paste0('./16_check_singular_contig/HS1_tab/', i, '.tab'), row.names = F, quote = F, sep = '\t')
 #}
 
+# not 100% if its valid to check for the orientation in this way. Check for the annotation of exeA (Type II secretory pathway ATPase component GspA/ExeA/MshM) which only occurs within HS1
+annotation_exeA <- read.table('input_data/check_HS1_exeA.tsv', sep='\t')
+colnames(annotation_exeA) <- c('SequenceId','Type','Start','Stop','Strand','LocusTag','Gene','Product', 'DbXrefs')
+annotation_exeA['Sample'] <- gsub('\\/.*','',annotation_exeA$SequenceId)
+annotation_exeA_fused <- annotation_exeA[annotation_exeA$Sample %in% overlap[overlap$slen > 3500000,]$Sample,]
+annotation_exeA_fused['orientation'] <- ifelse(annotation_exeA_fused$Start < annotation_exeA_fused$Stop, 'F', 'R')
+table(annotation_exeA_fused$orientation, annotation_exeA_fused$Strand) # all look in the same direction
 
 # # # plot HS1 annotation (annotated by bakta)
 # plot gene content on 12kb HR seq
