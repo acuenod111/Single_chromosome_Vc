@@ -350,6 +350,7 @@ blastn -query "$query" -db  "$db" \
   -max_target_seqs 5000 -out "$out"
 ```
 Then also evaluated in 'eval_read_count_HR.R'. 
+
 ### annotate HS1 using bakta
 
 ```{bash}
@@ -361,6 +362,14 @@ bakta  --verbose --keep-contig-headers --db /lustre03/project/6077363/GROUP/01_d
 
 ```
 
+### check orientation of HS1 by annotation
+To subset the bakta annotation for exeA, do the, use grep: 
+```{bash, echoTT, eval=F}
+# from within the bakta folder do: 
+grep "Type II secretory pathway ATPase component GspA" */*.tsv > check_HS1_exeA_public_fused.tsv # for the public fused Vc and 
+grep "Type II secretory pathway ATPase component GspA" */*.tsv > check_HS1_exeA.tsv # for all our genomes
+```
+evaluate in 'eval_read_count_HR.R' and 'public_long_reads.R' respectively.  
 
 ### Count reads spanning HS1 in the fused and non-fused state
 I realised that when checking how many reads span a region (the HR region on the fused chromosomes (aka junctions) or the HR regions on the non-fused ones) I need to exclude reads which have a large deteletion compared to the reference. (I realised as I had read ID in my outputs from BD1.2 strains chr2 which do not contain the 12kb HR, the reads still mapped, but with a large deteltion, these need to be removed). 
@@ -519,7 +528,7 @@ do
 #  blastn -query "${file}" -db "$db_dir"/short_contig \
   blastn -query "${file}" -db "$db_dir"/reads_spanning_junction \
   -outfmt '6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend qseq slen sstart send sstrand sseq' \
-  -max_target_seqs 100000 -out "$out_dir"/"${query_name}".tab # for the TLC fkanking use 100000 as max target
+  -max_target_seqs 100000 -out "$out_dir"/"${query_name}".tab 
 #   -max_target_seqs 1000 -out "$out_dir"/"${query_name}".tab
 done
 ```
@@ -691,7 +700,7 @@ Reads are assembled using Spades via Unicycler and Quality controlled via Quast,
 
 ```{bash, echo=T, eval=F}
 
-# This script has been adapted from a script originally written by Dr. Daniel Wüthrich from the Applied Microbiology Research group at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich in the research group of Prof. Adrian Egli (aegli@imm.uzh.ch) 
 
 # set directory where the metaphlan database is copied to (ther database has to live in scratch and can be copied from '/lustre03/project/6077363/GROUP/01_db/metaphlan_databases.tar.gz' and needs to be tar unzipped before usage)
 metaphlan_db_dir=/scratch/acuenod/metaphlan_databases/
