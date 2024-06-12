@@ -654,14 +654,25 @@ out=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/find_homol
 blastn -query &quot;$query&quot; -db  &quot;$db&quot; \
   -outfmt &#39;6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send&#39; \
   -max_target_seqs 5000 -out &quot;$out&quot;</code></pre>
-<p>Then also evaluated in ‘eval_read_count_HR.R’. ### annotate HS1 using
-bakta</p>
+<p>Then also evaluated in ‘eval_read_count_HR.R’.</p>
+</div>
+<div id="annotate-hs1-using-bakta" class="section level3">
+<h3>annotate HS1 using bakta</h3>
 <pre class="bash"><code>input_assembly=/lustre04/scratch/acuenod/household/01_data/03_bakta/12kb_overlap/overlap_134Vc041_134Vc042.fasta
 outbut_dir=/lustre04/scratch/acuenod/household/01_data/03_bakta/12kb_overlap/overlap
 
 ## added &#39;--keep-contig-headers&#39; flag, rerun with this when adding new sequences
 bakta  --verbose --keep-contig-headers --db /lustre03/project/6077363/GROUP/01_db/bakta/ &quot;$input_assembly&quot; --output &quot;$outbut_dir&quot; --force
 </code></pre>
+</div>
+<div id="check-orientation-of-hs1-by-annotation" class="section level3">
+<h3>check orientation of HS1 by annotation</h3>
+<p>To subset the bakta annotation for exeA, do the, use grep:</p>
+<pre class="bash"><code># from within the bakta folder do: 
+grep &quot;Type II secretory pathway ATPase component GspA&quot; */*.tsv &gt; check_HS1_exeA_public_fused.tsv # for the public fused Vc and 
+grep &quot;Type II secretory pathway ATPase component GspA&quot; */*.tsv &gt; check_HS1_exeA.tsv # for all our genomes</code></pre>
+<p>evaluate in ‘eval_read_count_HR.R’ and ‘public_long_reads.R’
+respectively.</p>
 </div>
 <div id="count-reads-spanning-hs1-in-the-fused-and-non-fused-state" class="section level3">
 <h3>Count reads spanning HS1 in the fused and non-fused state</h3>
@@ -812,7 +823,7 @@ do
 #  blastn -query &quot;${file}&quot; -db &quot;$db_dir&quot;/short_contig \
   blastn -query &quot;${file}&quot; -db &quot;$db_dir&quot;/reads_spanning_junction \
   -outfmt &#39;6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend qseq slen sstart send sstrand sseq&#39; \
-  -max_target_seqs 100000 -out &quot;$out_dir&quot;/&quot;${query_name}&quot;.tab # for the TLC fkanking use 100000 as max target
+  -max_target_seqs 100000 -out &quot;$out_dir&quot;/&quot;${query_name}&quot;.tab 
 #   -max_target_seqs 1000 -out &quot;$out_dir&quot;/&quot;${query_name}&quot;.tab
 done</code></pre>
 <p>Eval in ‘eval_read_count_HR.R’. I export all read ID in which an
@@ -972,7 +983,7 @@ NCBI and used tblastn to screen these in my genomes using tblastn:</p>
 via Quast, screened for contamination using Metaphlan and annotated via
 bakta:</p>
 <pre class="bash"><code>
-# This script has been adapted from a script originally written by Dr. Daniel Wüthrich from the Applied Microbiology Research group at the University Hospital of Basel
+# This script has been adapted from a script originally written by Dr. Daniel Wüthrich in the research group of Prof. Adrian Egli (aegli@imm.uzh.ch) 
 
 # set directory where the metaphlan database is copied to (ther database has to live in scratch and can be copied from &#39;/lustre03/project/6077363/GROUP/01_db/metaphlan_databases.tar.gz&#39; and needs to be tar unzipped before usage)
 metaphlan_db_dir=/scratch/acuenod/metaphlan_databases/
