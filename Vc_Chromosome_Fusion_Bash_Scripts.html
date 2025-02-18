@@ -560,7 +560,8 @@ reads to an external reference (Vc N16961) to call SNV using medaka -
 Filter out indels - extract low quality (lower than Qscore 40,
 corresponds to 0.0001 error probability) - from VCF to bed - use
 bcftools consensus to build consensus and mask these low quality sites
-(I do this per sample) - concatenate - build tree using raxml</p>
+(I do this per sample) - concatenate - build tree using raxml –&gt;
+iqtree</p>
 <p>Medaka:</p>
 <pre class="bash"><code>ml apptainer
 ## define read directory
@@ -594,6 +595,15 @@ grep -v &#39;&gt;&#39; /lustre04/scratch/acuenod/household/01_data/11_tree/outpu
 </code></pre>
 <p>Tree is compiled using RAxML:</p>
 <pre class="bash"><code>raxmlHPC -T &quot;$SLURM_CPUS_PER_TASK&quot; -x 1522 -f a -m GTRCAT -p 1522 -# 10 -s /lustre04/scratch/acuenod/household/01_data/11_tree/output/all_concat_highQ_variants_no_indels_concat.fasta -w /lustre04/scratch/acuenod/household/01_data/11_tree/output/raxml/ -n raxmltree_all -V AVX2
+</code></pre>
+<p>Repeat IQtree with bootstraps on SP (I realise RaXML is not ideal for
+this dataset, as it assigned minimal bramch lengths, even for the sam
+sequences)</p>
+<pre class="bash"><code>source ~/miniconda3/bin/activate
+cd /mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/05_tree/iqtree
+input=input/all_concat_highQ_variants_no_indels_concat_snp-sites.fasta
+
+iqtree2 -s &quot;$input&quot; --ufboot 5000 --boot-trees -T 128
 </code></pre>
 </div>
 <div id="lineage-assignment" class="section level3">
@@ -954,8 +964,6 @@ blastn -task blastn-short -query &quot;$query&quot; -db  &quot;$db&quot; \
 </div>
 <div id="par-genes" class="section level2">
 <h2>par genes</h2>
-<div id="section-2" class="section level3">
-<h3>2024-06-05</h3>
 <p>par genes play a role in partitioning the chromosomes to each cell
 after replication <a href="https://pubmed.ncbi.nlm.nih.gov/17197419/" class="uri">https://pubmed.ncbi.nlm.nih.gov/17197419/</a> when they are
 depleted, chr2 is lost. I therefore want to check of these are lost in
@@ -971,6 +979,688 @@ the proteins sequences for these and from parA and parB on Uniprot /
 NCBI and used tblastn to screen these in my genomes using tblastn:</p>
 <p>Then evaluate output in ‘eval_real_count_HR.R’.</p>
 </div>
+<div id="rec-mut-genes" class="section level2">
+<h2>rec / mut genes</h2>
+<p>I wan to check whether there are mutations in RecA.</p>
+<p>I will more systematically check all the mut and all the rec
+genes</p>
+<pre class="bash"><code>#cd /home/acuenod/scratch/household/01_data/03_bakta/tsv_passaging_ancestors
+#awk &#39;$7 ~ /mut|rec/ { print }&#39; *.tsv   &gt; mut_rec_genes.tsv
+#awk &#39;$7 ~ /mut|rec/ { print }&#39; *.tsv | awk &#39;{print $6}&#39;  &gt; geneID_mut_rec_genes.tsv ## this gives me all the gene ID, 
+## 
+# repeat on all
+cd /home/acuenod/scratch/household/01_data/03_bakta/
+awk &#39;$7 ~ /mut|rec/ { print }&#39; *Vc*/*.tsv   &gt; mut_rec_genes.tsv
+awk &#39;$7 ~ /mut|rec/ { print }&#39; *vc*/*.tsv | awk &#39;{print $6}&#39;  &gt; geneID_mut_rec_genes.tsv ## this gives me all the gene ID, 
+</code></pre>
+<pre class="r"><code>#briefly check which which rec / mut genes are found how many times</code></pre>
+<p>In another appraoch I will check if thee are snv in these genes
+detected with medaka when mapping against N16961 Ref To run snpEff on
+these, I first need to annotate the ref</p>
+<pre class="bash"><code># bakta
+
+# snpEff
+cd /home/acuenod/scratch/household/01_data/11_tree/ref/Vc_N16961
+mkdir snpEff
+cp /cvmfs/soft.computecanada.ca/easybuild/software/2020/Core/snpeff/5.0/snpEff.config snpEff/
+vim snpEff/snpEff.config
+
+# add the following two lines in the db section (under line 130)
+#my Vc genome Vc_N16961
+Vc_N16961.genome : Vc_N16961
+
+cd snpEff
+mkdir -p ./data/Vc_N16961
+cp ../GCF_001250235.2_5174_7_8_v2_genomic_concat.fna data/Vc_N16961/sequences.fa
+cp ../bakta/GCF_001250235.2_5174_7_8_v2_genomic_concat.gff3 data/Vc_N16961/genes.gff
+#in interactive node
+ml StdEnv/2020 snpeff/5.0
+java -Xmx8g -jar $EBROOTSNPEFF/snpEff.jar build -c snpEff.config -gff3 -v Vc_N16961 &gt; snpEff.stdout
+
+# to extract the reference gene ID of interest (all rec and all mut genes)
+/home/acuenod/scratch/household/01_data/11_tree/ref/Vc_N16961/bakta
+awk &#39;$7 ~ /mut|rec/ { print }&#39; GCF_001250235.2_5174_7_8_v2_genomic_concat.tsv   &gt; mut_rec_genes.tsv
+awk &#39;$7 ~ /mut|rec/ { print }&#39; GCF_001250235.2_5174_7_8_v2_genomic_concat.tsv | awk &#39;{print $6}&#39;  &gt; geneID_mut_rec_genes.tsv ## this gives me all the gene ID
+
+# use geneid to grep in annotated vcf files
+cd /home/acuenod/scratch/household/01_data/11_tree/ref/Vc_N16961/snpEff/out
+geneID=/home/acuenod/scratch/household/01_data/11_tree/ref/Vc_N16961/bakta/geneID_mut_rec_genes.tsv
+for gene in $(cat ${geneID}); do
+ echo &quot;$gene&quot;
+ grep &quot;$gene&quot; *.annotated.vcf &gt;&gt; snv_in_mut_rec.tab; 
+done
+
+# if I run this is a slurm script it gives me a slurm error, but the output looks fine and there is no error when I run this in an interactive node, so I think this is fine</code></pre>
+<p>–&gt; eval in ‘mut_rec.R’</p>
+</div>
+<div id="comparison-hr-mechanisms-to-previsously-described" class="section level2">
+<h2>comparison HR mechanisms to previsously described</h2>
+<p>To compare whether its the same genes involved in HR for fusion in
+our strains than described by Xie et al (doi: 10.1155/2017/8724304), I
+first blasted HS1 against their described fused strains:</p>
+<pre class="bash"><code>db=/home/acuenod/scratch/household/01_data/16_public_seqs/NSCV1_NSCV2/NSCV1-2
+query=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/highQ_short_read_datasets/blast/input/query/overlap_134Vc041_134Vc042.fasta
+out=/home/acuenod/scratch/household/01_data/16_public_seqs/NSCV1_NSCV2/blastout_HS1_NSCV1-2.tab
+
+blastn -query &quot;$query&quot; -db  &quot;$db&quot; \
+  -outfmt &#39;6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send&#39; \
+  -max_target_seqs 5000 -out &quot;$out&quot;</code></pre>
+<p>Then I manually extracted the genes involved in HR (locus tags from
+the paper) or IS elements from the NSCV genomes and tblastn them against
+HS1</p>
+<pre class="bash"><code>makeblastdb -in /lustre04/scratch/acuenod/household/01_data/16_public_seqs/NSCV1_NSCV2/HR_comparison/db/overlap_134Vc041_134Vc042.&gt;
+
+
+db=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/NSCV1_NSCV2/HR_comparison/db/overlap_134Vc041_134Vc042
+query_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/NSCV1_NSCV2/HR_comparison/query/
+out_dir=/lustre04/scratch/acuenod/household/01_data/16_public_seqs/NSCV1_NSCV2/HR_comparison/out/
+
+for file in $(ls &quot;$query_dir&quot;)
+do
+  query_name_temp=&quot;${file/%.fasta/}&quot;
+  query_name_temp=&quot;${query_name_temp/*\//}&quot;
+  query_name_temp=&quot;${query_name_temp/\:/_}&quot;
+  query_name=&quot;$query_name_temp&quot;
+  #echo &quot;${file}&quot;
+  echo &quot;${query_name}&quot;
+  tblastn -query &quot;$query_dir&quot;/&quot;${file}&quot; -db  &quot;$db&quot; \
+    -outfmt &#39;6 qseqid sseqid bitscore pident nident mismatch length qcovs qlen qstart qend slen sstart send&#39; \
+    -max_target_seqs 5000 -out &quot;$out_dir&quot;/&quot;${query_name}&quot;.tab
+done</code></pre>
+<p>To Val et al. and Yamamoto et al. I compared by looking at the locus
+tags.</p>
+</div>
+<div id="clair3" class="section level2">
+<h2>Clair3</h2>
+<p>I use clair3 to compare all strains which have been isolated from a
+household where at least one fused-chromosome genome was identified.</p>
+<p>I first run this without specifying ‘–no_phasing_for_fa’ which is
+needed for prokaryotes, so repeat for all household with this
+option.</p>
+<pre class="bash"><code>## household E
+(run this on SP)
+source ~/miniconda3/bin/activate
+conda activate clair3
+
+read_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/00_fastq
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_E.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_E
+
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    # create output dir
+    mkdir -p &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;
+    # map reads with minimap2 and convert to bam file
+    /mfs/acuenod/tools/minimap2/minimap2 -ax map-ont -t 16 &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta &quot;$read_dir&quot;/&quot;$query&quot;.fastq.gz \
+    | samtools sort -o &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    samtools index &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    #samtools faidx &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta
+    run_clair3.sh \
+    --bam_fn=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam \
+    --ref_fn=&quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta \
+    --threads=64 \
+    --platform=&quot;ont&quot; \
+    --model_path=&quot;/mfs/acuenod/tools/clair3_model/r1041_e82_400bps_sup_v420&quot; \
+    --output=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot; \
+    --snp_min_af=0.8 \
+    --include_all_ctgs \
+    --min_mq=5 \
+    --min_coverage=2 \
+    --no_phasing_for_fa
+  done
+done
+
+## household F
+source ~/miniconda3/bin/activate
+conda activate clair3
+
+read_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/00_fastq
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_F.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_F
+
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    # create output dir
+    mkdir -p &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;
+    # map reads with minimap2 and convert to bam file
+    /mfs/acuenod/tools/minimap2/minimap2 -ax map-ont -t 16 &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta &quot;$read_dir&quot;/&quot;$query&quot;.fastq.gz \
+    | samtools sort -o &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    samtools index &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    #samtools faidx &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta
+    run_clair3.sh \
+    --bam_fn=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam \
+    --ref_fn=&quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta \
+    --threads=64 \
+    --platform=&quot;ont&quot; \
+    --model_path=&quot;/mfs/acuenod/tools/clair3_model/r1041_e82_400bps_sup_v420&quot; \
+    --output=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot; \
+    --snp_min_af=0.8 \
+    --include_all_ctgs \
+    --min_mq=5 \
+    --min_coverage=2 \
+    --no_phasing_for_fa
+  done
+done
+
+
+## household H
+source ~/miniconda3/bin/activate
+conda activate clair3
+
+read_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/00_fastq
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_H.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_H
+
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    # create output dir
+    mkdir -p &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;
+    # map reads with minimap2 and convert to bam file
+    /mfs/acuenod/tools/minimap2/minimap2 -ax map-ont -t 16 &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta &quot;$read_dir&quot;/&quot;$query&quot;.fastq.gz \
+    | samtools sort -o &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    samtools index &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    #samtools faidx &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta
+    run_clair3.sh \
+    --bam_fn=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam \
+    --ref_fn=&quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta \
+    --threads=64 \
+    --platform=&quot;ont&quot; \
+    --model_path=&quot;/mfs/acuenod/tools/clair3_model/r1041_e82_400bps_sup_v420&quot; \
+    --output=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot; \
+    --snp_min_af=0.8 \
+    --include_all_ctgs \
+    --min_mq=5 \
+    --min_coverage=2 \
+    --no_phasing_for_fa
+  done
+done
+
+## household I
+source ~/miniconda3/bin/activate
+conda activate clair3
+
+read_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/00_fastq
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_I.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_I
+
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    # create output dir
+    mkdir -p &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;
+    # map reads with minimap2 and convert to bam file
+    /mfs/acuenod/tools/minimap2/minimap2 -ax map-ont -t 16 &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta &quot;$read_dir&quot;/&quot;$query&quot;.fastq.gz \
+    | samtools sort -o &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    samtools index &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    #samtools faidx &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta
+    run_clair3.sh \
+    --bam_fn=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam \
+    --ref_fn=&quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta \
+    --threads=64 \
+    --platform=&quot;ont&quot; \
+    --model_path=&quot;/mfs/acuenod/tools/clair3_model/r1041_e82_400bps_sup_v420&quot; \
+    --output=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot; \
+    --snp_min_af=0.8 \
+    --include_all_ctgs \
+    --min_mq=5 \
+    --min_coverage=2 \
+    --no_phasing_for_fa
+  done
+done
+
+## household P
+source ~/miniconda3/bin/activate
+conda activate clair3
+
+read_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/00_fastq
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_P.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_P
+
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    # create output dir
+    mkdir -p &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;
+    # map reads with minimap2 and convert to bam file
+    /mfs/acuenod/tools/minimap2/minimap2 -ax map-ont -t 16 &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta &quot;$read_dir&quot;/&quot;$query&quot;.fastq.gz \
+    | samtools sort -o &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    samtools index &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam
+    #samtools faidx &quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta
+    run_clair3.sh \
+    --bam_fn=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/&quot;$query&quot;_&quot;$ref&quot;_sorted.bam \
+    --ref_fn=&quot;$assembly_dir&quot;/&quot;$ref&quot;.fasta \
+    --threads=64 \
+    --platform=&quot;ont&quot; \
+    --model_path=&quot;/mfs/acuenod/tools/clair3_model/r1041_e82_400bps_sup_v420&quot; \
+    --output=&quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot; \
+    --snp_min_af=0.8 \
+    --include_all_ctgs \
+    --min_mq=5 \
+    --min_coverage=2 \
+    --no_phasing_for_fa
+  done
+done
+</code></pre>
+<pre class="bash"><code># to check if the correct option was always run, do: 
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_E
+grep &quot;\-\-no\_phasing\_for\_fa\=True&quot; */*/run_clair3.log |wc -l # 400 --&gt; correct
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_F
+grep &quot;\-\-no\_phasing\_for\_fa\=True&quot; */*/run_clair3.log |wc -l # 900 --&gt; correct
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_H
+grep &quot;\-\-no\_phasing\_for\_fa\=True&quot; */*/run_clair3.log |wc -l # 400 --&gt; correct
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_P
+grep &quot;\-\-no\_phasing\_for\_fa\=True&quot; */*/run_clair3.log |wc -l # 361 --&gt; correct
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_I
+grep &quot;\-\-no\_phasing\_for\_fa\=True&quot; */*/run_clair3.log |wc -l # 900 --&gt; correct
+</code></pre>
+<p>filter to only include hq snv</p>
+<pre class="bash"><code># summarise for household E
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_E.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_E
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_E
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    ## create output dir
+    zgrep -v &quot;^\#&quot; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output.vcf.gz | sed &quot;s/$/\t&quot;$query$ref&quot;/&quot; &gt;&gt; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output_sum.tab ; 
+   done
+done
+# merge all and add household E
+cat &quot;$outdir&quot;/*/*/merge_output_sum.tab | sed &quot;s/$/\thousehold_E/&quot; &gt; merge_output_sum_household_E.tab
+
+
+# summarise for household F
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_F.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_F
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_F
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    ## create output dir
+    zgrep -v &quot;^\#&quot; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output.vcf.gz | sed &quot;s/$/\t&quot;$query$ref&quot;/&quot; &gt;&gt; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output_sum.tab ; 
+   done
+done
+# merge all and add household F
+cat &quot;$outdir&quot;/*/*/merge_output_sum.tab | sed &quot;s/$/\thousehold_F/&quot; &gt; merge_output_sum_household_F.tab
+
+
+# summarise for household H
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_H.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_H
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_H
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    ## create output dir
+    zgrep -v &quot;^\#&quot; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output.vcf.gz | sed &quot;s/$/\t&quot;$query$ref&quot;/&quot; &gt;&gt; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output_sum.tab ; 
+   done
+done
+# merge all and add household H
+cat &quot;$outdir&quot;/*/*/merge_output_sum.tab | sed &quot;s/$/\thousehold_H/&quot; &gt; merge_output_sum_household_H.tab
+
+
+
+# summarise for household P
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_P.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_P
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_P
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    ## create output dir
+    zgrep -v &quot;^\#&quot; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output.vcf.gz | sed &quot;s/$/\t&quot;$query$ref&quot;/&quot; &gt;&gt; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output_sum.tab ; 
+   done
+done
+# merge all and add household P
+cat &quot;$outdir&quot;/*/*/merge_output_sum.tab | sed &quot;s/$/\thousehold_P/&quot; &gt; merge_output_sum_household_P.tab
+
+
+# summarise for household I
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/samples_household_I.txt
+outdir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_I
+cd ~/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/household_I
+for query in $(cat &quot;$samples&quot;); do
+  echo &quot;$query&quot;
+  for ref in $(cat &quot;$samples&quot;); do
+  echo &quot;$ref&quot;
+    ## create output dir
+    zgrep -v &quot;^\#&quot; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output.vcf.gz | sed &quot;s/$/\t&quot;$query$ref&quot;/&quot; &gt;&gt; &quot;$outdir&quot;/&quot;$query&quot;/&quot;$ref&quot;/merge_output_sum.tab ; 
+   done
+done
+# merge all and add household P
+cat &quot;$outdir&quot;/*/*/merge_output_sum.tab | sed &quot;s/$/\thousehold_I/&quot; &gt; merge_output_sum_household_I.tab
+
+# merge all
+cd /mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/03_clair3/output_fusion_household/
+cat household_*/merge_output_sum_household_*.tab &gt; merge_output_sum_household_all.tab</code></pre>
+<p>eval in tree_heatmap_iqtree_UF.R</p>
+</div>
+<div id="compare-chromosomes" class="section level2">
+<h2>compare chromosomes</h2>
+<p>To find out whether there is DNA transfer upon fusion / fission, I
+will examine the edges of the fusion sites (HS1). To examine if the
+edges are always the same, extract the flanking sides of HS1 and compare
+them using ANIm. Build bed files for 500bp up and downstream of HS1 in
+‘circular_chromosome_plot.R’.</p>
+<p>then I extracted the sequenced with:</p>
+<pre class="bash"><code>#!/bin/bash
+#SBATCH --time=4:00:00
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=1G
+#SBATCH --mail-user=aline.cuenod@mail.mcgill.ca
+#SBATCH --mail-type=ALL
+#SBATCH --account=def-shapiro-ab
+#SBATCH --job-name=medaka_households
+
+#load module 
+ml StdEnv/2020 bedtools/2.29.2
+
+samples=/lustre04/scratch/acuenod/household/01_data/samples.txt
+
+assembly_dir=/home/acuenod/scratch/household/01_data/01_assemblies/
+bed_dir=/lustre04/scratch/acuenod/household/01_data/21_check_chr_dna_transfer/flanking_HS1/beds/
+output_dir=/lustre04/scratch/acuenod/household/01_data/21_check_chr_dna_transfer/flanking_HS1/seqs
+
+# Include -s flag, forces strandedness. If the feature occupies the antisense strand, the sequence will be reverse complemented
+for sample in $(cat &quot;$samples&quot;); do
+        bedtools getfasta -fi &quot;$assembly_dir&quot;/&quot;${sample}.fasta&quot; -bed &quot;$bed_dir&quot;/HS1_flanking_1.bed -fo &quot;$output_dir&quot;/HS1_flanking_1/&quot;$sample&quot;.fasta -s
+        bedtools getfasta -fi &quot;$assembly_dir&quot;/&quot;${sample}.fasta&quot; -bed &quot;$bed_dir&quot;/HS1_flanking_2.bed -fo &quot;$output_dir&quot;/HS1_flanking_2/&quot;$sample&quot;.fasta -s
+        bedtools getfasta -fi &quot;$assembly_dir&quot;/&quot;${sample}.fasta&quot; -bed &quot;$bed_dir&quot;/HS1_flanking_3.bed -fo &quot;$output_dir&quot;/HS1_flanking_3/&quot;$sample&quot;.fasta -s
+        bedtools getfasta -fi &quot;$assembly_dir&quot;/&quot;${sample}.fasta&quot; -bed &quot;$bed_dir&quot;/HS1_flanking_4.bed -fo &quot;$output_dir&quot;/HS1_flanking_4/&quot;$sample&quot;.fasta -s
+done</code></pre>
+<p>Then I compare them using fastANI:</p>
+<pre class="bash"><code>ml StdEnv/2020 gcc/9.3.0 fastani/1.32
+
+
+query_dir=/home/acuenod/scratch/household/01_data/21_check_chr_dna_transfer/flanking_HS1/seqs/
+out_dir=/lustre04/scratch/acuenod/household/01_data/21_check_chr_dna_transfer/flanking_HS1/ANI/
+
+
+for i in {1..4}
+do
+    fastANI --ql &quot;$query_dir&quot;/HS1_flanking_&quot;${i}&quot;_paths.txt --rl &quot;$query_dir&quot;/HS1_flanking_&quot;${i}&quot;_paths.txt -o &quot;$out_dir&quot;/ANI_HS1_flanking_&quot;${i}&quot;.tab -t 4 --fragLen 300
+done
+</code></pre>
+<p>Then I check the range with:</p>
+<pre class="bash"><code>awk &#39;{print $3}&#39; ANI_HS1_flanking_1.tab | sort -n | awk &#39;NR==1 {min=$1} {max=$1} END {print &quot;Min:&quot;, min, &quot;Max:&quot;, max}&#39;</code></pre>
+<p>–&gt; above 99.9 for ANI_HS1_flanking_1, ANI_HS1_flanking_2,
+ANI_HS1_flanking_4. –&gt; check ANI_HS1_flanking_3 in more detail. –&gt;
+if ANI value below 70 its not in the output (this means there could also
+be differences in flanking regions 1,2 and 4) –&gt; eval all</p>
+<p>##pyseer I will run a GWAS using pyseer to see if I find any specific
+variants to the fused chr strains</p>
+<pre class="bash"><code>#install pyseer on SP
+source ~/miniconda3/bin/activate
+conda install pyseer
+# somhow worked via pip but not conda
+python3 -m pip install pyseer
+
+# I follow this tutorial: https://pyseer.readthedocs.io/en/master/tutorial.html
+# install unitig counter
+conda install unitig-counter
+# build unitigs
+unitig-counter -strains strain_list.txt -output unitigs -nb-cores 64
+
+# down- and uploaded the &#39;scripts&#39; folder from here https://github.com/mgalardini/pyseer
+# get phylogenetic distances from tree
+python scripts/phylogeny_distance.py --lmm input/iqtree_all_concat_highQ_variants_no_indels_concat_snp-sites.fasta.treefile &gt; input/phylogeny_distances.tsv
+# run the actual gwas
+gzip input/unitigs/unitigs.txt
+pyseer --lmm --phenotypes input/pyseer_fusion.tab --kmers input/unitigs/unitigs.txt.gz --similarity input/phylogeny_distances.tsv --output-patterns output/fusion_unitig_patterns.txt --cpu 64 &gt; output/fusion_unitigs.txt
+
+python scripts/count_patterns.py output/fusion_unitig_patterns.txt
+#gives
+#Patterns:  1036
+#Threshold: 4.83E-05
+python scripts/qq_plot.py output/fusion_unitigs.txt
+
+# filter for significant unitigs
+cat &lt;(head -1 output/fusion_unitigs.txt) &lt;(awk &#39;$4&lt;4.83E-05 {print $0}&#39; output/fusion_unitigs.txt) &gt; output/significant_fusion_unitigs.txt
+
+# to anotate I created a file listing all the gff3 file of the strains I used to compile the unitigs
+# this looks like this
+#/mfs/acuenod/pyseer/input/fasta/101Vc01.fasta  /mfs/acuenod/pyseer/input/gff3/101Vc01.gff3 draft
+#/mfs/acuenod/pyseer/input/fasta/101Vc01.fasta  /mfs/acuenod/pyseer/input/gff3/106Vc03.gff3 draft
+#/mfs/acuenod/pyseer/input/fasta/101Vc01.fasta  /mfs/acuenod/pyseer/input/gff3/111Vc05.gff3 draft
+#/mfs/acuenod/pyseer/input/fasta/101Vc01.fasta  /mfs/acuenod/pyseer/input/gff3/116Vc07.gff3 draft
+#/mfs/acuenod/pyseer/input/fasta/101Vc01.fasta  /mfs/acuenod/pyseer/input/gff3/121Vc09.gff3 draft
+# ...
+
+# then to annoate run
+annotate_hits_pyseer output/significant_fusion_unitigs.txt input/references_list.txt output/annotated_significant_fusion_unitigs.txt
+
+# then to summarise 
+python scripts/summarise_annotations.py output/annotated_significant_fusion_unitigs.txt &gt; output/significant_gene_hits.txt
+
+# --&gt; no significant gene hits found
+# repeat withh all features (checked bakta output for options)
+# then to annoate run
+annotate_hits_pyseer --feature-type rRNA --feature-type tRNA --feature-type ncRNA --feature-type tmRNA --feature-type CDS --feature-type oriC --feature-type oriT --feature-type regulatory_region output/significant_fusion_unitigs.txt input/references_list.txt output/annotated_significant_fusion_unitigs.txt
+
+# then to summarise 
+python scripts/summarise_annotations.py output/annotated_significant_fusion_unitigs.txt &gt; output/significant_hits_all_features.txt
+# --&gt; no other feature hits found
+</code></pre>
+</div>
+<div id="passaging" class="section level2">
+<h2>Passaging</h2>
+<pre class="bash"><code>cd /home/acuenod/scratch/household/01_data/22_passaging/fastq
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode01/* &gt; 114Vc01D00.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode02/* &gt; 114Vc03D00.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode03/* &gt; 117Vc01D00.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode04/* &gt; 117Vc10D00.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode05/* &gt; 114Vc01D03.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode06/* &gt; 114Vc03D03.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode07/* &gt; 117Vc01D03.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode08/* &gt; 117Vc10D03.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode09/* &gt; 114Vc01D08.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode10/* &gt; 114Vc03D08.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode11/* &gt; 117Vc01D08.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode12/* &gt; 117Vc10D08.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode13/* &gt; 114Vc01D11.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode14/* &gt; 114Vc03D11.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode15/* &gt; 117Vc01D11.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode16/* &gt; 117Vc10D11.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode17/* &gt; 114Vc01D16.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode18/* &gt; 114Vc03D16.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode19/* &gt; 117Vc01D16.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode20/* &gt; 117Vc10D16.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode21/* &gt; 114Vc01D20.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode22/* &gt; 114Vc03D20.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode23/* &gt; 117Vc01D20.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode24/* &gt; 117Vc10D20.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode25/* &gt; N16961.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode26/* &gt; BS01.fastq.gz
+cat /home/acuenod/scratch/household/01_data/999_raw/AW02P6/*/fastq_pass/barcode27/* &gt; TE_Buffer.fastq.gz
+
+# and for the assemblies
+cd /home/acuenod/scratch/household/01_data/22_passaging/fasta
+
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode01/assembly.fasta 114Vc01D00.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode02/assembly.fasta 114Vc03D00.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode03/assembly.fasta 117Vc01D00.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode04/assembly.fasta 117Vc10D00.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode05/assembly.fasta 114Vc01D03.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode06/assembly.fasta 114Vc03D03.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode07/assembly.fasta 117Vc01D03.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode08/assembly.fasta 117Vc10D03.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode09/assembly.fasta 114Vc01D08.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode10/assembly.fasta 114Vc03D08.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode11/assembly.fasta 117Vc01D08.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode12/assembly.fasta 117Vc10D08.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode13/assembly.fasta 114Vc01D11.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode14/assembly.fasta 114Vc03D11.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode15/assembly.fasta 117Vc01D11.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode16/assembly.fasta 117Vc10D11.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode17/assembly.fasta 114Vc01D16.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode18/assembly.fasta 114Vc03D16.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode19/assembly.fasta 117Vc01D16.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode20/assembly.fasta 117Vc10D16.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode21/assembly.fasta 114Vc01D20.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode22/assembly.fasta 114Vc03D20.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode23/assembly.fasta 117Vc01D20.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode24/assembly.fasta 117Vc10D20.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode25/assembly.fasta N16961.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode26/assembly.fasta BS01.fasta
+ln -s /lustre04/scratch/acuenod/household/01_data/999_raw/AW02P6/assemblies/barcode27/assembly.fasta TE_Buffer.fasta
+</code></pre>
+<p>I then map them against HS1 in its fused and unfused form:</p>
+<pre class="bash"><code>#SBATCH --array=1-27 # indicate the number of samples to be analysed here. 
+array=(mock 114Vc01D00 114Vc03D00 117Vc01D00 117Vc10D00 114Vc01D03 114Vc03D03 117Vc01D03 117Vc10D03 114Vc01D08 114Vc03D08 117Vc01D08 117Vc10D08 114Vc01D11 114Vc03D11 117Vc01D11 117Vc10D11 114Vc01D16 114Vc03D16 117Vc01D16 117Vc10D16 114Vc01D20 114Vc03D20 117Vc01D20 117Vc10D20 N16961 BS01 TE_Buffer)
+
+# load modules
+ml StdEnv/2020 minimap2/2.24
+
+# define the variable &#39;sample_id&#39;from the &#39;array&#39; defined above
+export sample=${array[&quot;$SLURM_ARRAY_TASK_ID&quot;]}
+
+input_reads=/home/acuenod/scratch/household/01_data/22_passaging/fastq/&quot;$sample&quot;.fastq.gz
+input_ref=/home/acuenod/scratch/household/01_data/01_assemblies/135Vc05.fasta # map all against 135Vc05 (is from the same patient as 135Vc06, which was used for the read extraction for the fused chromosome, but assembled into two chromosomes) 
+output_dir=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_non-fused_HR
+
+# run minimap
+minimap2 -ax map-ont --sam-hit-only -t 16 &quot;$input_ref&quot; &quot;$input_reads&quot; &gt; &quot;$output_dir&quot;/&quot;$sample&quot;.sam # for Oxford Nanopore reads
+
+# run sam to bam and index
+ml StdEnv/2020 samtools/1.17
+# convert sam to bam
+samtools view -S -b &quot;$output_dir&quot;/&quot;$sample&quot;.sam &gt; &quot;$output_dir&quot;/&quot;$sample&quot;.bam
+# sort bam file
+samtools sort &quot;$output_dir&quot;/&quot;$sample&quot;.bam &gt; &quot;$output_dir&quot;/&quot;$sample&quot;.sorted.bam
+# index sorted bam file
+samtools index &quot;$output_dir&quot;/&quot;$sample&quot;.sorted.bam
+
+#repeat for fusion site
+#
+input_reads=/home/acuenod/scratch/household/01_data/22_passaging/fastq/&quot;$sample&quot;.fastq.gz
+input_ref2=/home/acuenod/scratch/household/01_data/01_assemblies/135Vc06.fasta # map all against 135Vc06 
+output_dir2=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_fused_HR
+
+# run minimap
+minimap2 -ax map-ont --sam-hit-only -t 16 &quot;$input_ref2&quot; &quot;$input_reads&quot; &gt; &quot;$output_dir2&quot;/&quot;$sample&quot;.sam # for Oxford Nanopore reads
+
+# run sam to bam and index
+ml StdEnv/2020 samtools/1.17
+# convert sam to bam
+samtools view -S -b &quot;$output_dir2&quot;/&quot;$sample&quot;.sam &gt; &quot;$output_dir2&quot;/&quot;$sample&quot;.bam
+# sort bam file
+samtools sort &quot;$output_dir2&quot;/&quot;$sample&quot;.bam &gt; &quot;$output_dir2&quot;/&quot;$sample&quot;.sorted.bam
+# index sorted bam file
+samtools index &quot;$output_dir2&quot;/&quot;$sample&quot;.sorted.bam</code></pre>
+<pre class="bash"><code># clean up
+rm *.sam
+rm *0.bam
+rm *1.bam
+rm *3.bam
+rm *8.bam
+rm *16.bam</code></pre>
+<p>Then filter the reads as before: For the non-fused:</p>
+<pre class="bash"><code>array=(mock 114Vc01D00 114Vc03D00 117Vc01D00 117Vc10D00 114Vc01D03 114Vc03D03 117Vc01D03 117Vc10D03 114Vc01D08 114Vc03D08 117Vc01D08 117Vc10D08 114Vc01D11 114Vc03D11 117Vc01D11 117Vc10D11 114Vc01D16 114Vc03D16 117Vc01D16 117Vc10D16 114Vc01D20 114Vc03D20 117Vc01D20 117Vc10D20 N16961 BS01 TE_Buffer)
+
+export sample=${array[&quot;$SLURM_ARRAY_TASK_ID&quot;]}
+
+#load apptainer module 
+ml  StdEnv/2020 samtools/1.17
+
+input=/home/acuenod/scratch/household/01_data/22_passaging/readmapping_non-fused_HR/&quot;$sample&quot;.sorted.bam
+input_bed_HR_chr=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_HR_non-fused/135Vc05_junctions_extended_HR_13087.bed #all were mapped agains 135Vc06 (HR_chr position always stays the same)
+output_bed=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_non-fused_HR/beds_out/&quot;$sample&quot;.bed
+output_bed_no_inserts=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_non-fused_HR/beds_out/&quot;$sample&quot;_no_inserts_larger_1000.bed
+output_readID_HR_chr_1=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_non-fused_HR/read_ids/&quot;$sample&quot;_reads_spanning_HR1.txt
+output_readID_HR_chr_2=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_non-fused_HR/read_ids/&quot;$sample&quot;_reads_spanning_HR2.txt
+
+
+# bam to bed
+ml bedtools/2.29.2
+# convert bam to bed and filter bed for reads. remove duplicated reads and non-primary alignments
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP |bedtools bamtobed &gt; &quot;$output_bed&quot;
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP |awk &#39;substr($0,1,1)==&quot;@&quot; || $6 !~ /([0-9]{4,}\D)/&#39; |bedtools bamtobed &gt; &quot;$output_bed_no_inserts&quot;
+# this second line filters reads out which have an deletion (when compared to the reference of 1000 or more. (this first awk expression extracts the headers, the second excludes reads which have a 4-digit-D pattern in their CIGAR string)
+
+#bedtools bamtobed -i &quot;$input&quot; &gt; &quot;$output_bed&quot;
+
+# extract reads spanning HR_chr 1
+HR_chr_1_1=$(awk &#39;$4== &quot;HR_chr_1&quot; {print $2}&#39; &quot;$input_bed_HR_chr&quot;)
+HR_chr_1_2=$(awk &#39;$4== &quot;HR_chr_1&quot; {print $3}&#39; &quot;$input_bed_HR_chr&quot;)
+chr1_name=$(awk &#39;$4== &quot;HR_chr_1&quot; {print $1}&#39; &quot;$input_bed_HR_chr&quot;)
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP |awk &#39;substr($0,1,1)==&quot;@&quot; || $6 !~ /([0-9]{4,}D)/{print}&#39; |bedtools bamtobed | awk -v var0=&quot;$chr1_name&quot; -v var1=&quot;$HR_chr_1_1&quot; -v var2=&quot;$HR_chr_1_2&quot; &#39;{ if ($1 == var0 &amp;&amp; $2 &lt;= var1  &amp;&amp; $3 &gt;= var2) print $4 }&#39;  | awk &#39;!seen[$0]++&#39; | awk &#39;{$1 = $1 OFS (NR==1?&quot;HR_chr_1&quot;:&quot;HR_chr_1&quot;)} 1&#39; &gt; &quot;$output_readID_HR_chr_1&quot;
+
+# extract reads spanning HR_chr 1
+HR_chr_2_1=$(awk &#39;$4== &quot;HR_chr_2&quot; {print $2}&#39; &quot;$input_bed_HR_chr&quot;)
+HR_chr_2_2=$(awk &#39;$4== &quot;HR_chr_2&quot; {print $3}&#39; &quot;$input_bed_HR_chr&quot;)
+chr2_name=$(awk &#39;$4== &quot;HR_chr_2&quot; {print $1}&#39; &quot;$input_bed_HR_chr&quot;)
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP |awk &#39;substr($0,1,1)==&quot;@&quot; || $6 !~ /([0-9]{4,}D)/{print}&#39; |bedtools bamtobed | awk -v var0=&quot;$chr2_name&quot; -v var1=&quot;$HR_chr_2_1&quot; -v var2=&quot;$HR_chr_2_2&quot; &#39;{ if ($1 == var0 &amp;&amp; $2 &lt;= var1  &amp;&amp; $3 &gt;= var2) print $4 }&#39;  | awk &#39;!seen[$0]++&#39; | awk &#39;{$1 = $1 OFS (NR==1?&quot;HR_chr_2&quot;:&quot;HR_chr_2&quot;)} 1&#39; &gt; &quot;$output_readID_HR_chr_2&quot;
+</code></pre>
+<p>For the fused:</p>
+<pre class="bash"><code>array=(mock 114Vc01D00 114Vc03D00 117Vc01D00 117Vc10D00 114Vc01D03 114Vc03D03 117Vc01D03 117Vc10D03 114Vc01D08 114Vc03D08 117Vc01D08 117Vc10D08 114Vc01D11 114Vc03D11 117Vc01D11 117Vc10D11 114Vc01D16 114Vc03D16 117Vc01D16 117Vc10D16 114Vc01D20 114Vc03D20 117Vc01D20 117Vc10D20 N16961 BS01 TE_Buffer)
+
+
+export sample=${array[&quot;$SLURM_ARRAY_TASK_ID&quot;]}
+
+#load apptainer module 
+ml  StdEnv/2020 samtools/1.17
+
+input=/home/acuenod/scratch/household/01_data/22_passaging/readmapping_fused_HR/&quot;$sample&quot;.sorted.bam
+input_bed_junction=/lustre04/scratch/acuenod/household/01_data/13_minimap_alignmnets/read_id_spanning_junction_HR/135Vc06_junctions_extended_HR_13087.bed #all were mapped agains 135Vc06 (junction position always stays the same)
+output_bed=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_fused_HR/beds_out/&quot;$sample&quot;.bed
+output_bed_no_inserts=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_fused_HR/beds_out/&quot;$sample&quot;_no_inserts_larger_1000.bed
+output_readID_junction_1=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_fused_HR/read_ids/&quot;$sample&quot;_reads_spanning_HR1.txt
+output_readID_junction_2=/lustre04/scratch/acuenod/household/01_data/22_passaging/readmapping_fused_HR/read_ids/&quot;$sample&quot;_reads_spanning_HR2.txt
+
+
+# bam to bed
+ml bedtools/2.29.2
+# convert bam to bed and filter bed for reads. remove duplicated reads and non-primary alignments
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP |bedtools bamtobed &gt; &quot;$output_bed&quot;
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP |awk &#39;substr($0,1,1)==&quot;@&quot; || $6 !~ /([0-9]{4,}\D)/&#39; |bedtools bamtobed &gt; &quot;$output_bed_no_inserts&quot;
+
+#bedtools bamtobed -i &quot;$input&quot; &gt; &quot;$output_bed&quot;
+# extract reads spanning junction 1
+junction_1_1=$(awk &#39;$4== &quot;junction_1&quot; {print $2}&#39; &quot;$input_bed_junction&quot;)
+junction_1_2=$(awk &#39;$4== &quot;junction_1&quot; {print $3}&#39; &quot;$input_bed_junction&quot;)
+#bedtools bamtobed -i &quot;$input&quot; | awk -v var1=&quot;$junction_1_1&quot; -v var2=&quot;$junction_1_2&quot; &#39;{ if ($2 &lt;= var1  &amp;&amp; $3 &gt;= var2) print $4 }&#39;  | awk &#39;!seen[$0]++&#39; | awk &#39;{$1 = $1 OFS (NR==1?&quot;junction_1&quot;:&quot;junction_1&quot;)} 1&#39; &gt; &quot;$output_readID_junction_1&quot;
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP | awk &#39;substr($0,1,1)==&quot;@&quot; || $6 !~ /([0-9]{4,}D)/{print}&#39; | bedtools bamtobed | awk -v var1=&quot;$junction_1_1&quot; -v var2=&quot;$junction_1_2&quot; &#39;{ if ($2 &lt;= var1  &amp;&amp; $3 &gt;= var2) print $4 }&#39;  | awk &#39;!seen[$0]++&#39; | awk &#39;{$1 = $1 OFS (NR==1?&quot;junction_1&quot;:&quot;junction_1&quot;)} 1&#39; &gt; &quot;$output_readID_junction_1&quot;
+
+# extract reads spanning junction 1
+junction_2_1=$(awk &#39;$4== &quot;junction_2&quot; {print $2}&#39; &quot;$input_bed_junction&quot;)
+junction_2_2=$(awk &#39;$4== &quot;junction_2&quot; {print $3}&#39; &quot;$input_bed_junction&quot;)
+samtools view &quot;$input&quot; --min-MQ 1 -F 256 -h --remove-flags DUP | awk &#39;substr($0,1,1)==&quot;@&quot; || $6 !~ /([0-9]{4,}D)/{print}&#39; | bedtools bamtobed | awk -v var1=&quot;$junction_2_1&quot; -v var2=&quot;$junction_2_2&quot; &#39;{ if ($2 &lt;= var1  &amp;&amp; $3 &gt;= var2) print $4 }&#39;  | awk &#39;!seen[$0]++&#39; | awk &#39;{$1 = $1 OFS (NR==1?&quot;junction_2&quot;:&quot;junction_2&quot;)} 1&#39; &gt; &quot;$output_readID_junction_2&quot;
+</code></pre>
+<p>Then count the number of reads for both mapping scenarios:</p>
+<pre class="bash"><code>cd /home/acuenod/scratch/household/01_data/22_passaging
+wc -l readmapping_*_HR/read_ids/* &gt; count_reads_HS1_passaging.txt</code></pre>
+<p>summarise the flye output to get information on mean read depth to
+normalize read count</p>
+<pre class="bash"><code>cd /home/acuenod/scratch/household/01_data/999_raw/AW02P6/assemblies
+
+for sample in $(cat barcodes.txt)
+do
+  echo ${sample}
+  tail -n+2 ${sample}*/*assembly_info.txt | awk -F &quot;\t&quot; -v samplezz=&quot;$sample&quot; &#39;{OFS=&quot;\t&quot;} {print $0, samplezz, refzz}&#39; &gt;&gt; ../../../22_passaging/fasta/assembly_info_all.txt
+done </code></pre>
+<p>–&gt; not all yielded an assembly (two failed because of not enoug
+reads, I repeated and checked). Therefore, use total read length to
+normalize</p>
+<pre class="bash"><code>grep &quot;Total read length&quot; barcode*/flye.log &gt; total_read_length_info.txt
+# remove duplicate lines
+awk -i inplace &#39;!seen[$0]++&#39; total_read_length_info.txt</code></pre>
 </div>
 </div>
 <div id="analysis-of-publicly-available-sequence-data" class="section level1">
