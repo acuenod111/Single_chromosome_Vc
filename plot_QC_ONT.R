@@ -39,6 +39,8 @@ sum(flye_info$length > 3500000) # in 28 samples one large chromosome was assembl
 # 10 chromosomes of 9 isolates did not circularly assemble
 not_all_chr_circ <- flye_info[flye_info$length > 500000 & flye_info$length < 3700000 & flye_info$circ. == 'N',]
 
+# for the 8/9 ones where one chromosome circularised, we can state these are not fused
+
 # summarise to how many chromosomes were assembled
 flye_info_sum <- flye_info %>% group_by(sample) %>% summarise(n_chr = sum(length > 800000), 
                                                               fract_circ = mean(circ.[length> 800000] == 'Y'))
@@ -56,8 +58,16 @@ flye_info_sum_p
 # add column indicating whether (i) not all chromosomes where fully circularised (n=9) and where one fused chromosome was circularry assembled
 QC['chr'] <- ifelse(QC$Sample %in% flye_info_sum[flye_info_sum$n_chr == '1', ]$sample, 'One chromosome assembled', 
                     ifelse(QC$Sample %in% not_all_chr_circ$sample, 'Not all chromosomes circularised', 'Two circular chromosomes assembled'))
+
 # write 
 write.table(QC, 'input_data/QC_extended.csv', row.names = F, quote = F, sep = ';')
+
+# add meta
+meta <- read.csv2('input_data/very_basic_meta_2.csv', sep=',')
+QC['Individual'] <- gsub('(\\d{3})(Vc\\d{2})', '\\1', QC$Sample)
+QC_meta <- merge(QC, meta, by='Individual')
+write.table(QC_meta, '../../01_data/02_ONT_QC/QC_meta.csv', row.names = F, quote = F, sep = ';')
+
 
 # plot some basic QC measures
 # plot the N50  of the reads

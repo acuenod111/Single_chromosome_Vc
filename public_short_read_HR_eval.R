@@ -85,6 +85,7 @@ snippy_out_sum <- snippy_out %>%
   slice_min(Nr, with_ties =  F)
 
 colnames(snippy_out_sum) <- c('Sample', 'Nr_SNP_to_lineage_ref', 'Lineage')
+
 # check before merge
 setdiff(read_depth_HR_meta$Sample, snippy_out_sum$Sample)
 # merge
@@ -125,6 +126,9 @@ read_depth_HR_meta$lineage_7P <- gsub("BD2_IND2" , 'BD2', read_depth_HR_meta$lin
 read_depth_HR_meta$lineage_7P <- gsub("BD1.2_IND1.3" , 'BD1.2', read_depth_HR_meta$lineage_7P)
 read_depth_HR_meta$lineage_7P <- gsub("BD1.1_IND1" , 'BD1.1', read_depth_HR_meta$lineage_7P)
 read_depth_HR_meta$lineage_7P <- gsub("IND1.3_T13" , 'IND1.3', read_depth_HR_meta$lineage_7P)
+
+write.table(read_depth_HR_meta, '../public_short_7PET_lineage.txt', row.names = F, col.names = T, quote = F, sep=';')
+
 
 # plot lineages to tree
 read_depth_HR_meta_plot_lineage <- read_depth_HR_meta[,c('Sample', 'lineage_7P')]
