@@ -23,6 +23,9 @@ This script summarises how often the HS1 was found in each genome sequenced for 
 It plots the annotation of HS1 and evaluates and plots the number of reads which span HS1 and are flanking different chr sequences excluding the ones where a sequencing adapter was found (Fig. S2). 
 Finally, this script evaluates the presence similarity of sequences which are known to play a role in chromosome replication, such as the par genes, the origins of replication (ori 1 and 2), the Chr2 replication triggering Site crtS, and the dam gene. 
 
+### eval_island_flanking_blast.R
+This script evaluates the blast of the flanking side of the four virulence associated genomic islands VPI-1, VPI-2, VSP-I and VSP-II and outputs the island positions for each sample.
+
 ### circular_chromosome_plot.R
 This script plots the non-fused V. cholerae chromosomes and a fused V. cholerae chromosome with the location of the two origins of replication (ori1 and ori2), crtS, HS1 and the four virulence associated genomic islands (VPI-1, VPI-2, VSP-I and VSP-II). 
 
