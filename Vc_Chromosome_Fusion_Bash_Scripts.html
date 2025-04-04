@@ -543,6 +543,36 @@ for sample in $(cat /lustre04/scratch/acuenod/household/01_data/samples.txt); do
 done
 #remove all header lines but first one 
 sed -i -e &#39;/^\#seq\_name/{x;/./!{x;h;b;};d}&#39; all_fly_assembly_info.txt</code></pre>
+<p>Use ReCycled (<a href="https://github.com/Freevini/ReCycled" class="uri">https://github.com/Freevini/ReCycled</a>) to check for
+circularity of contigs</p>
+<pre class="bash"><code>## recycled
+</code></pre>
+<pre class="bash"><code>samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/samples.txt
+read_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/00_fastq
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+out_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/ReCycled
+
+for sample in $(cat &quot;$samples&quot;); do
+  /mfs/acuenod/software/ReCycled/ReCycled.sh -i &quot;$assembly_dir&quot;/&quot;$sample&quot;.fasta -l &quot;$read_dir&quot;/&quot;$sample&quot;.fastq.gz -d &quot;$out_dir&quot; -o&quot;$sample&quot;.fasta 
+done # &gt;&gt; &quot;$out_dir&quot;/ReCycled_stdout.out 2&gt;&amp;1 
+
+cd /mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/ReCycled
+grep -v &#39;^#&#39; *.log &gt; all_ReCycled_logs.tab
+# then copied colnames in vim
+
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+assembly_dir_rename=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/renamed
+#sample=101Vc01
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/samples.txt
+rename_file=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/renamed/rename_contigs.tab
+
+source ~/miniconda3/bin/activate
+
+# in plot_QC_ONT produce rename table
+# then rename using seqkit
+for sample in $(cat &quot;$samples&quot;); do 
+  seqkit replace -p &#39;(.+)$&#39; -r &#39; {kv}&#39; -k &quot;$rename_file&quot; &quot;$assembly_dir&quot;/&quot;$sample&quot;.fasta --keep-key &gt; &quot;$assembly_dir_rename&quot;/&quot;$sample&quot;.fasta
+done</code></pre>
 <p>Evaluate this in plot_QC_ONT.R</p>
 </div>
 <div id="annotation" class="section level3">

@@ -223,6 +223,41 @@ done
 sed -i -e '/^\#seq\_name/{x;/./!{x;h;b;};d}' all_fly_assembly_info.txt
 ```
 
+Use ReCycled (https://github.com/Freevini/ReCycled) to check for circularity of contigs
+```{bash}
+## recycled
+
+```{bash}
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/samples.txt
+read_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/00_fastq
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+out_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/ReCycled
+
+for sample in $(cat "$samples"); do
+  /mfs/acuenod/software/ReCycled/ReCycled.sh -i "$assembly_dir"/"$sample".fasta -l "$read_dir"/"$sample".fastq.gz -d "$out_dir" -o"$sample".fasta 
+done # >> "$out_dir"/ReCycled_stdout.out 2>&1 
+
+cd /mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/ReCycled
+grep -v '^#' *.log > all_ReCycled_logs.tab
+# then copied colnames in vim
+
+assembly_dir=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta
+assembly_dir_rename=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/renamed
+#sample=101Vc01
+samples=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/samples.txt
+rename_file=/mfs/acuenod/cholera/household_study/01_data/01_isolate_ONT/01_fasta/renamed/rename_contigs.tab
+
+source ~/miniconda3/bin/activate
+
+# in plot_QC_ONT produce rename table
+# then rename using seqkit
+for sample in $(cat "$samples"); do 
+  seqkit replace -p '(.+)$' -r ' {kv}' -k "$rename_file" "$assembly_dir"/"$sample".fasta --keep-key > "$assembly_dir_rename"/"$sample".fasta
+done
+```
+
+
+
 Evaluate this in plot_QC_ONT.R
 
 ### Annotation
