@@ -7,10 +7,7 @@ library(patchwork)
 setwd('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/02_scripts/check/')
 
 # did all again with new assemblies
-QC <- read.csv('input_data/quality.csv')
-
-# remove 'sample' 1139Vc03 (wrong sample name in QC script, therefore no data)
-QC <- QC[QC$Sample != '1139Vc03',]
+QC <- read.csv('input_data/quality_after_non-Vc_contig_removed.csv')
 
 # remove last row (no sample)
 QC <- QC[-nrow(QC),]
@@ -20,19 +17,36 @@ flye_info <- read.csv2('input_data/all_fly_assembly_info.txt', sep = '\t')
 # add column names
 colnames(flye_info) <- c("seq_name","length","cov.","circ.","repeat.","mult.","alt_group","graph_path","sample")
 
-# check how many on the chromosomes are not circular
-flye_info$length <- as.numeric(as.character(flye_info$length))
-flye_info$cov. <- as.numeric(as.character(flye_info$cov.))
-ggplot(flye_info) + geom_point( aes(x=length, y = cov., col=circ.)) 
+# I ran kraken on the assemblies to identify the ones where there are non-Vc contigs (most probably stemming from sequencing artefacts)
+Vc_kraken <- read.table('input_data/Vc_all_report_kraken2.txt',sep='\t')
+Vc_kraken['sample'] <- gsub('\\_.*', '', Vc_kraken$V1)
+#check if all only once
+unique(table(Vc_kraken$sample)) # all exactly once
+# add perc Vc
+Vc_kraken['perc_Vc'] <- gsub('.*\\:', '', Vc_kraken$V1)
+# for the ones which were not 100 Vc I ran SprayNPray to identify the non-Vc contigs
+sprayNpray <- read.csv('input_data/all_sprayNpray_out.csv')
+sprayNpray <- sprayNpray[!sprayNpray$contig == 'contig',]
+# check length of all non-Vc contigs
+sprayNpray$contig_length <- as.numeric(as.character(sprayNpray$contig_length))
+quantile(sprayNpray[!grepl('Vibrio cholerae',sprayNpray$closest_blast_hits),]$contig_length)
+#View(sprayNpray[!grepl('Vibrio cholerae',sprayNpray$closest_blast_hits),])
+
+non_Vc_contigs <- sprayNpray[!grepl('Vibrio cholerae',sprayNpray$closest_blast_hits),]$contig # I manually check, these are all repetitive and probably sequencing artefact
+#write.table(sprayNpray[!grepl('Vibrio cholerae',sprayNpray$closest_blast_hits),]$contig, row.names = F, quote = F, '/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/01_data/02_ONT_QC/non-Vc_contigs.tab')
+
 
 # check circularity of contigs from the ReCycled output
 # more chromosomes were identified as circularly assembled using ReCycled, which checks for reads spanning the end-start of each contig 
 recycled <- read.table('input_data/all_ReCycled_logs.tab', comment.char = "", header = T)
+# some contigs were identified as non-Vc after running recycled, remove these
+recycled['contig_name'] <- gsub('(.*\\:)(\\d{3}Vc\\d{3,})(\\_.*$)', '\\2', recycled$X.contigName)
+recycled <- recycled[!recycled$contig_name %in% non_Vc_contigs, ]
+
 # it only sais 'Circularizable' for chromosome 1, but thats because it does not find dnaa on chromosome 2, so I just check if i find overlapping reads
 table(recycled$StartOfTargetMapping)
 range(recycled[recycled$OverlapCov == 0,]$ContigLength) # some small contigs are not circularly assembled
 range(recycled[recycled$ContigLength > 800000,]$OverlapCov) # for all chromosomes, I have reads spanning the break --> circularly assembled
-
 recycled['overlap_dev_total_cov'] <- recycled$OverlapCov / recycled$ContigCov
 #check overlap fraction of the ones I consider circular
 quantile(recycled[recycled$OverlapCov >0,]$overlap_dev_total_cov) # looks ok
@@ -50,40 +64,15 @@ recycled['completeness'] <- ifelse(recycled$OverlapCov > 0, 'complete', 'partial
 
 table(recycled$chromosome, recycled$topology) 
 # all chromosomes were circularly assembled (409xtwo chromosomes, 58 one large fused chromosome). 
-# further, we assemble 158 extrachromosomal contigs (118 circular and 40 non-circular ones)
+# further, we assemble 108 extrachromosomal contigs (103 circular and 5 non-circular ones)
+
+unique(recycled[recycled$chromosome == 'extrachromosomal element',]$Isolate)
+length(unique(recycled[recycled$chromosome == 'extrachromosomal element',]$Isolate))
 
 # create table to rename contigs for NCBI submission
 contig_rename <- data.frame(old=recycled$X.contigName, new = paste0('[organism=Vibrio cholerae][isolate=', recycled$Isolate,'][chromosome=', recycled$chromosome,'][topology=', recycled$topology, '][completeness=', recycled$completeness, ']'))
 contig_rename$new <- gsub('chromosome=extrachromosomal contig', 'extrachromosomal contig', contig_rename$new)
 #write.table(contig_rename, '/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/01_data/02_ONT_QC/rename_contigs.tab', quote = F, row.names = F, col.names = F)
-
-p <- ggplot(flye_info, aes(x=length/1000000)) + 
-  geom_histogram(bins = 50, aes(fill=circ.)) + xlab('length [MB]') + ylab('Number of contigs') + theme_light() + scale_fill_manual(values = c('grey77', 'grey22'))
-p
-#sum(flye_info$length > 500000 & flye_info$length < 2000000) #409 chromosome 1 assembled
-#table(flye_info[flye_info$length > 500000 & flye_info$length < 2000000,]$circ.) # 408/409 chromosome 1 assembled circularly
-#sum(flye_info$length > 2000000 & flye_info$length < 3700000) #409 chromosome 2 assembled
-#table(flye_info[flye_info$length > 2000000 & flye_info$length < 3700000,]$circ.) # 400/409 chromosome 2 assembled circularly
-
-#sum(flye_info$length < 50000 & flye_info$circ. == 'Y') #126 non-chromosomal small elements were circularly assembled
-#sum(flye_info$length > 3500000) # in 58 samples one large chromosome was assembled (instead of chr1 and chr2)
-
-# with flye, 10 chromosomes of 9 isolates did not circularly assemble
-#not_all_chr_circ <- flye_info[flye_info$length > 500000 & flye_info$length < 3700000 & flye_info$circ. == 'N',]
-# for the 8/9 ones where one chromosome circularised, we can state these are not fused
-
-## summarise to how many chromosomes were assembled
-#flye_info_sum <- flye_info %>% group_by(sample) %>% summarise(n_chr = sum(length > 800000), 
-#                                                              fract_circ = mean(circ.[length> 800000] == 'Y'))
-#flye_info_sum$n_chr <- factor(flye_info_sum$n_chr, levels = c(2,1))
-#flye_info_sum$fract_circ <- ifelse(flye_info_sum$fract_circ == 1, 'all circular', 
-#                                   ifelse(flye_info_sum$fract_circ == 0.5, '1/2 circular', 
-#                                          ifelse(flye_info_sum$fract_circ == 0, '0/2 circular', NA)))
-#flye_info_sum$fract_circ <- factor(flye_info_sum$fract_circ, levels = c('all circular', '1/2 circular', '0/2 circular'))
-#flye_info_sum_p <- ggplot(flye_info_sum, aes(x= n_chr, fill = factor(n_chr), alpha = factor(fract_circ))) +
-#  geom_bar() + scale_alpha_manual(values = c(1,0.6,0.2)) + scale_fill_manual(values = c('darkblue', 'lightblue')) +
-#  ylab('Nr. of assemblies') + xlab('Nr. of chromosomes') + theme_light()
-#flye_info_sum_p
 
 recycled_sum <- recycled %>% group_by(Isolate) %>% summarise(n_chr = sum(ContigLength > 800000), 
                                                                 fract_circ = mean(OverlapCov[ContigLength> 800000] >0))

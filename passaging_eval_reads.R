@@ -44,19 +44,21 @@ reads_spanning$generations_estimate <- factor(reads_spanning$generations_estimat
 # plot
 p <- ggplot(reads_spanning) +
   geom_boxplot(aes(x=generations_estimate, y=nr_reads_norm, fill=mapping_HS1, col=mapping_HS1), alpha= 0.5) + scale_fill_manual(values = c('lightblue', 'darkblue'), na.value = "grey91") + scale_color_manual(values = c('lightblue', 'darkblue'), na.value = "grey91") + 
+  geom_point(aes(x=generations_estimate, y=nr_reads_norm, col=mapping_HS1), position = position_dodge(width = .75), shape = 15) +
   facet_grid(~fusion_state) + 
   ylab('# reads spanning HS1 / total read length') +
   xlab('Estimated # generations') + 
   theme_light() +
   theme(axis.text.x = element_text(angle = 60)) 
-  
+p  
+
 pdf("output_figures/passaging_read.pdf", height = 3.5, width = 7)
 p
 dev.off()
 #
 
 # I first called these with medaka which gave me many SNV (which I did not trust, because there were so many). I therefore repeated the variant calling with clair3, which also gives me information on the allele frequency which I want to check 
-clair3 <- read.table('input_data/passaging/clair3_sum_no_phasing.tab', sep='\t')
+clair3 <- read.table('input_data/passaging/clair3_25_sum.tab', sep='\t')
 # add col names
 colnames(clair3) <- c('CHROM','POS','ID','REF','ALT','QUAL','FILTER','INFO','FORMAT','SAMPLE', 'sample')
 clair3['ref'] <- gsub('(\\d{3}Vc\\d{2})(\\1)', '\\1', clair3$CHROM)

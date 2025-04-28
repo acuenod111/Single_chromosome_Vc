@@ -15,7 +15,7 @@ library(scales)
 setwd('/Users/alinecuenod/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents_Alines_MacBook_Pro/Other/cholera/01_household_study/02_scripts/check/')
 
 # import basic metadata 
-meta_basic <- read.csv2("input_data/very_basic_meta_1.csv", sep = ',')
+meta_basic <- read.csv2("input_data/very_basic_meta_2.csv", sep = ',')
 
 # I had previsouly constructed a tree with RaXML which I realised was not the ideal appraoch for our dataset, as it assigns a minimal branch length even for the same sequences
 #tree <- read.tree("input_data/RAxML_bestTree.raxmltree_all_ref_N16961")
@@ -326,7 +326,9 @@ dev.off()
 
 # eval clair 3 within fusion housholds
 # all
-all_household <- read.table('input_data/clair3_fusion_households_merge_output_sum_household_all.tab')
+#all_household <- read.table('input_data/clair3_fusion_households_merge_output_sum_household_all.tab')
+
+all_household <- read.table('input_data/clair3_fusion_households_merge_output_sum_fusion_households_non_vc_assemblies_removed.tab')
 colnames(all_household) <- c('CHROM','POS','ID','REF','ALT','QUAL','FILTER','INFO','FORMAT','SAMPLE', 'query_ref', 'household')
 all_household['query'] <- gsub('(\\d{3}Vc\\d{2})(\\d{3}Vc\\d{2})', '\\1', all_household$query_ref)
 all_household['ref'] <- gsub('(\\d{3}Vc\\d{2})(\\d{3}Vc\\d{2})', '\\2', all_household$query_ref)
@@ -343,6 +345,8 @@ all_household_hq$Allele_Frequency_ALT <- as.numeric(as.character(all_household_h
 all_household_hq$Estimated_read_depth <- as.numeric(as.character(all_household_hq$Estimated_read_depth))
 all_household_hq <- all_household_hq[all_household_hq$Allele_Frequency_ALT >= 0.8 & all_household_hq$Estimated_read_depth >= 10,]
 
+#all_household_hq['check'] <- paste0(all_household_hq$CHROM, all_household_hq$POS, all_household_hq$ID, all_household_hq$REF, all_household_hq$ALT, all_household_hq$query_ref,   all_household_hq$household,   all_household_hq$query,     all_household_hq$ref)
+#all_household_hq_old['check'] <- paste0(all_household_hq_old$CHROM, all_household_hq_old$POS, all_household_hq_old$ID, all_household_hq_old$REF, all_household_hq_old$ALT, all_household_hq_old$query_ref,   all_household_hq_old$household,   all_household_hq_old$query,     all_household_hq_old$ref)
 
 # summarise for each household
 E_household_hq_sum <- all_household_hq[all_household_hq$household == 'household_E',] %>% group_by(query, ref) %>% summarise(n_hq_SNV = n()) %>% ungroup %>% complete(query, ref, fill=list(n_hq_SNV= 0))
@@ -386,6 +390,7 @@ household_H_plot <-ggplot(H_household_hq_sum, aes(query, ref, fill= n_hq_SNV)) +
   theme_light() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, colour=x_cols), axis.text.y = element_text(colour = x_cols), legend.position = 'none')  + ggtitle('Household H (Event 2)')
 range(H_household_hq_sum[grepl('118',H_household_hq_sum$ref) & grepl('117',H_household_hq_sum$query),]$n_hq_SNV)
+range(H_household_hq_sum[grepl('117',H_household_hq_sum$ref) & grepl('118',H_household_hq_sum$query),]$n_hq_SNV)
 
 # household I
 I_household_hq_sum <- all_household_hq[all_household_hq$household == 'household_I',] %>% group_by(query, ref) %>% summarise(n_hq_SNV = n()) %>% ungroup %>% complete(query, ref, fill=list(n_hq_SNV= 0))
@@ -416,6 +421,6 @@ household_P_plot <-ggplot(P_household_hq_sum, aes(query, ref, fill= n_hq_SNV)) +
 household_P_plot
 range(P_household_hq_sum$n_hq_SNV)
 
-pdf('output_figures/clair3_heatmap_within_fusion_household.pdf', height=10, width = 15)
+pdf('output_figures/clair3_heatmap_within_fusion_household_non_Vc_removed.pdf', height=10, width = 15)
 household_E_plot + household_H_plot + household_P_plot + household_I_plot+ household_F_plot
 dev.off()
